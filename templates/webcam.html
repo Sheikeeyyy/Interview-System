@@ -421,21 +421,28 @@ transform:translateX(-50%); z-index:5;">
     fd.append("question_text", QUESTIONS[qIndex].question);
     fd.append("video", blob, `q${qIndex + 1}.webm`);
 
-    const res = await fetch(`/upload_video_question/${testId}`, {
-      method: "POST",
-      headers: { "X-CSRFToken": csrfToken },
-      body: fd
-    });
+    try {
+      const res = await fetch(`/upload_video_question/${testId}`, {
+        method: "POST",
+        headers: { "X-CSRFToken": csrfToken },
+        body: fd
+      });
 
-    const data = await res.json();
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`);
+      }
 
-    if (!data.ok) {
-      alert("❌ Upload failed");
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Unknown upload error");
+
+      submissionIdInput.value = data.submission_id;
+      return true;
+
+    } catch (err) {
+      console.error("Upload error:", err);
+      alert(`❌ Upload failed: ${err.message}. Please try again.`);
       return false;
     }
-
-    submissionIdInput.value = data.submission_id;
-    return true; // ✅ IMPORTANT
   }
 
   /* ---------------- NEXT ---------------- */
@@ -454,33 +461,39 @@ transform:translateX(-50%); z-index:5;">
 
     statusEl.innerText = "⏳ Saving answer...";
 
-    const blob = await stopRecordingAndGetBlob();
+    try {
+      const blob = await stopRecordingAndGetBlob();
 
-    if (!blob) {
-      statusEl.innerText = "⚠ Recording failed. Please answer again.";
+      if (!blob) {
+        statusEl.innerText = "⚠ Recording failed. Please answer again.";
+        isSaving = false;
+        nextBtn.disabled = false;
+        startRecording();
+        return;
+      }
+
+      const ok = await uploadQuestionVideo(blob);
+      if (!ok) {
+        statusEl.innerText = "❌ Upload failed. Try again.";
+        isSaving = false;
+        nextBtn.disabled = false;
+        startRecording();
+        return;
+      }
+
+      qIndex++;
+      renderQuestion();
+
+      statusEl.innerText = `✅ Recording Q${qIndex + 1}...`;
+      startRecording();
+
+    } catch (e) {
+      console.error("Next button error:", e);
+      statusEl.innerText = "❌ Error occurred. Try again.";
+    } finally {
       isSaving = false;
       nextBtn.disabled = false;
-      startRecording();
-      return;
     }
-
-    const ok = await uploadQuestionVideo(blob);
-    if (!ok) {
-      statusEl.innerText = "❌ Upload failed. Try again.";
-      isSaving = false;
-      nextBtn.disabled = false;
-      startRecording();
-      return;
-    }
-
-    qIndex++;
-    renderQuestion();
-
-    statusEl.innerText = `✅ Recording Q${qIndex + 1}...`;
-    startRecording();
-
-    isSaving = false;
-    nextBtn.disabled = false;
   };
 
   /* ---------------- PREVIOUS ---------------- */

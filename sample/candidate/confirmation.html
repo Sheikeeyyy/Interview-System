@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Exam Submitted - {{ exam.title }}{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/candidate.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="confirmation-container">
+    <div class="confirmation-card fade-in">
+        <div class="confirmation-icon">✅</div>
+        <h1>Exam Submitted Successfully!</h1>
+        <p class="text-secondary mb-4">Thank you for completing the exam</p>
+
+        <div class="card" style="text-align: left; max-width: 400px; margin: 0 auto;">
+            <h3 style="margin-bottom: var(--spacing-md);">{{ exam.title }}</h3>
+            <div style="color: var(--text-secondary); font-size: 0.9375rem;">
+                <p style="margin-bottom: var(--spacing-sm);">
+                    <strong>Exam Type:</strong> {{ exam.exam_type|upper }}
+                </p>
+                <p style="margin-bottom: var(--spacing-sm);">
+                    <strong>Questions:</strong> {{ exam.num_questions }}
+                </p>
+                <p style="margin-bottom: 0;">
+                    <strong>Duration:</strong> {{ exam.duration }} minutes
+                </p>
+            </div>
+        </div>
+
+        <p class="text-muted mt-4" style="font-size: 0.875rem;">
+            Your responses have been recorded and will be evaluated by the administrator.
+            <br>
+            You will be notified of your results via email.
+        </p>
+    </div>
+</div>
+{% endblock %}

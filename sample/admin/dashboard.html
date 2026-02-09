@@ -1,0 +1,403 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Exam Platform{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Header -->
+    <header class="dashboard-header">
+        <div class="dashboard-logo">Exam Platform</div>
+        <div class="dashboard-user">
+            <span class="user-name">{{ session.admin_username }}</span>
+            <a href="{{ url_for('admin.logout') }}" class="btn btn-secondary btn-sm">Logout</a>
+        </div>
+    </header>
+
+    <!-- Main content -->
+    <main class="dashboard-main">
+        <div class="container">
+            <!-- Tabs -->
+            <div class="dashboard-tabs">
+                <button class="tab-button active" data-tab="create">Create Exam</button>
+                <button class="tab-button" data-tab="exams">Active Exams</button>
+                <button class="tab-button" data-tab="results">Results</button>
+            </div>
+
+            <!-- Create Exam Tab -->
+            <div class="tab-content active" id="create-tab">
+                <div class="create-exam-form">
+                    <h2>Create New Exam</h2>
+                    <p class="text-secondary mb-4">Generate AI-powered exam questions from your documents</p>
+
+                    <form id="createExamForm">
+                        <div class="form-group">
+                            <label for="title" class="form-label">Exam Title</label>
+                            <input type="text" id="title" name="title" required
+                                placeholder="e.g., Python Programming Assessment">
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="exam_type" class="form-label">Exam Type</label>
+                                <select id="exam_type" name="exam_type" required>
+                                    <option value="mcq">Multiple Choice (MCQ)</option>
+                                    <option value="descriptive">Descriptive</option>
+                                    <option value="voice">Voice Response</option>
+                                    <option value="webcam">Webcam Response</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="duration" class="form-label">Duration (minutes)</label>
+                                <input type="number" id="duration" name="duration" required min="5" max="180"
+                                    value="30">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="num_questions" class="form-label">Number of Questions</label>
+                            <input type="number" id="num_questions" name="num_questions" required min="1" max="50"
+                                value="10">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Upload Document (Optional)</label>
+                            <div class="file-upload-area" id="fileUploadArea"
+                                onclick="document.getElementById('document').click()">
+                                <div class="file-upload-icon">📄</div>
+                                <div class="file-upload-text">Click to upload PDF or DOCX</div>
+                                <div class="file-name" id="fileName"></div>
+                            </div>
+                            <input type="file" id="document" name="document" accept=".pdf,.docx" style="display: none;"
+                                onchange="handleFileSelect(event)">
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" id="createBtn">
+                            Generate Exam
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Active Exams Tab -->
+            <div class="tab-content" id="exams-tab">
+                <div class="flex justify-between items-center mb-4">
+                    <h2>Active Exams</h2>
+                    <button class="btn btn-secondary btn-sm" onclick="loadExams()">
+                        <span>↻</span> Refresh
+                    </button>
+                </div>
+                <div class="exams-grid" id="examsGrid">
+                    <!-- Exams will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Results Tab -->
+            <div class="tab-content" id="results-tab">
+                <div class="results-container">
+                    <h2>Exam Results</h2>
+                    <div class="exam-selector mb-4">
+                        <label for="examSelect" class="form-label">Select Exam</label>
+                        <select id="examSelect" onchange="loadResults(this.value)">
+                            <option value="">Choose an exam...</option>
+                        </select>
+                    </div>
+                    <div id="resultsContainer">
+                        <!-- Results will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loadingOverlay" style="display: none;">
+    <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <p>Processing...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Tab switching
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.addEventListener('click', () => {
+            const tabName = button.dataset.tab;
+
+            // Update buttons
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+
+            // Update content
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(tabName + '-tab').classList.add('active');
+
+            // Load data if needed
+            if (tabName === 'exams') {
+                loadExams();
+            } else if (tabName === 'results') {
+                loadExamsForSelect();
+            }
+        });
+    });
+
+    // File upload handling
+    function handleFileSelect(event) {
+        const file = event.target.files[0];
+        const uploadArea = document.getElementById('fileUploadArea');
+        const fileName = document.getElementById('fileName');
+
+        if (file) {
+            fileName.textContent = file.name;
+            uploadArea.classList.add('has-file');
+        }
+    }
+
+    // Create exam form submission
+    document.getElementById('createExamForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const formData = new FormData(e.target);
+        const createBtn = document.getElementById('createBtn');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+
+        createBtn.disabled = true;
+        createBtn.innerHTML = '<span class="spinner"></span> Generating...';
+        loadingOverlay.style.display = 'flex';
+
+        try {
+            const response = await fetch('{{ url_for("admin.create_exam") }}', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                alert('Exam created successfully!');
+                e.target.reset();
+                document.getElementById('fileUploadArea').classList.remove('has-file');
+                document.getElementById('fileName').textContent = '';
+
+                // Switch to exams tab
+                document.querySelector('[data-tab="exams"]').click();
+            } else {
+                alert('Error: ' + data.message);
+            }
+        } catch (error) {
+            alert('Error creating exam: ' + error.message);
+        } finally {
+            createBtn.disabled = false;
+            createBtn.textContent = 'Generate Exam';
+            loadingOverlay.style.display = 'none';
+        }
+    });
+
+    // Load exams
+    async function loadExams() {
+        const grid = document.getElementById('examsGrid');
+        grid.innerHTML = '<p class="text-secondary">Loading exams...</p>';
+
+        try {
+            const response = await fetch('{{ url_for("admin.get_exams") }}');
+            const exams = await response.json();
+
+            if (exams.length === 0) {
+                grid.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📝</div>
+                    <h3>No exams yet</h3>
+                    <p>Create your first exam to get started</p>
+                </div>
+            `;
+                return;
+            }
+
+            grid.innerHTML = exams.map(exam => `
+            <div class="exam-card fade-in">
+                <div class="exam-card-header">
+                    <div>
+                        <h3 class="exam-title">${exam.title}</h3>
+                        <span class="exam-type-badge exam-type-${exam.exam_type}">${exam.exam_type}</span>
+                    </div>
+                </div>
+                <div class="exam-meta">
+                    <div>📊 ${exam.num_questions} questions</div>
+                    <div>⏱️ ${exam.duration} minutes</div>
+                    <div>👥 ${exam.candidate_count} candidates</div>
+                    <div>📅 ${exam.created_at}</div>
+                </div>
+                <div class="exam-link-section">
+                    <label class="form-label">Shareable Link</label>
+                    <div class="exam-link-input">
+                        <input type="text" value="${exam.exam_link}" readonly id="link-${exam.id}">
+                        <button class="btn btn-secondary btn-sm" onclick="copyLink(${exam.id})">Copy</button>
+                    </div>
+                </div>
+                <div class="exam-actions">
+                    <button class="btn btn-primary btn-sm" onclick="viewResults(${exam.id})">View Results</button>
+                </div>
+            </div>
+        `).join('');
+        } catch (error) {
+            grid.innerHTML = '<p class="text-error">Error loading exams</p>';
+        }
+    }
+
+    // Copy exam link
+    function copyLink(examId) {
+        const input = document.getElementById('link-' + examId);
+        input.select();
+        document.execCommand('copy');
+        alert('Link copied to clipboard!');
+    }
+
+    // View results
+    function viewResults(examId) {
+        document.querySelector('[data-tab="results"]').click();
+        document.getElementById('examSelect').value = examId;
+        loadResults(examId);
+    }
+
+    // Load exams for select dropdown
+    async function loadExamsForSelect() {
+        const select = document.getElementById('examSelect');
+
+        try {
+            const response = await fetch('{{ url_for("admin.get_exams") }}');
+            const exams = await response.json();
+
+            select.innerHTML = '<option value="">Choose an exam...</option>' +
+                exams.map(exam => `<option value="${exam.id}">${exam.title}</option>`).join('');
+        } catch (error) {
+            console.error('Error loading exams:', error);
+        }
+    }
+
+    // Load results
+    async function loadResults(examId) {
+        const container = document.getElementById('resultsContainer');
+
+        if (!examId) {
+            container.innerHTML = '';
+            return;
+        }
+
+        container.innerHTML = '<p class="text-secondary">Loading results...</p>';
+
+        try {
+            const response = await fetch(`/admin/exam/${examId}/results`);
+            const data = await response.json();
+
+            if (data.results.length === 0) {
+                container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">👥</div>
+                    <h3>No submissions yet</h3>
+                    <p>Candidates haven't submitted their exams yet</p>
+                </div>
+            `;
+                return;
+            }
+
+            container.innerHTML = `
+            <div class="flex justify-between items-center mb-4">
+                <h3>${data.exam.title}</h3>
+                <div class="flex gap-2">
+                    <a href="/admin/exam/${examId}/export/csv" class="btn btn-secondary btn-sm">Export CSV</a>
+                    <a href="/admin/exam/${examId}/export/excel" class="btn btn-secondary btn-sm">Export Excel</a>
+                </div>
+            </div>
+            <div class="candidates-list">
+                ${data.results.map(candidate => `
+                    <div class="candidate-card fade-in">
+                        <div class="candidate-header">
+                            <div class="candidate-info">
+                                <h3>${candidate.name}</h3>
+                                <p class="candidate-email">${candidate.email}</p>
+                            </div>
+                            <div class="candidate-score">
+                                <div class="score-value">${candidate.avg_score.toFixed(1)}%</div>
+                                <div class="score-label">Average Score</div>
+                            </div>
+                        </div>
+                        <div class="exam-meta">
+                            <div>Started: ${candidate.started_at}</div>
+                            <div>Submitted: ${candidate.submitted_at}</div>
+                            <div>Status: ${candidate.status}</div>
+                        </div>
+                        <div class="exam-actions">
+                            <button class="btn btn-primary btn-sm" onclick="evaluateCandidate(${examId}, ${candidate.id})">
+                                AI Evaluate
+                            </button>
+                            <button class="btn btn-secondary btn-sm" onclick="toggleDetails(${candidate.id})">
+                                View Answers
+                            </button>
+                        </div>
+                        <div class="candidate-details" id="details-${candidate.id}">
+                            ${candidate.answers.map(answer => `
+                                <div class="answer-item">
+                                    <div class="answer-question">${answer.question}</div>
+                                    <div class="answer-text">${answer.answer}</div>
+                                    ${answer.score !== null ? `
+                                        <div class="answer-feedback">
+                                            <span class="feedback-text">${answer.feedback || 'No feedback'}</span>
+                                            <span class="answer-score">${answer.score}%</span>
+                                        </div>
+                                    ` : '<p class="text-muted">Not evaluated yet</p>'}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+        } catch (error) {
+            container.innerHTML = '<p class="text-error">Error loading results</p>';
+        }
+    }
+
+    // Toggle candidate details
+    function toggleDetails(candidateId) {
+        const details = document.getElementById('details-' + candidateId);
+        details.classList.toggle('show');
+    }
+
+    // Evaluate candidate
+    async function evaluateCandidate(examId, candidateId) {
+        if (!confirm('Evaluate this candidate using AI? This may take a moment.')) return;
+
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        loadingOverlay.style.display = 'flex';
+
+        try {
+            const response = await fetch(`/admin/exam/${examId}/evaluate/${candidateId}`, {
+                method: 'POST'
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                alert('Evaluation completed!');
+                loadResults(examId);
+            } else {
+                alert('Error: ' + data.message);
+            }
+        } catch (error) {
+            alert('Error evaluating candidate: ' + error.message);
+        } finally {
+            loadingOverlay.style.display = 'none';
+        }
+    }
+
+    // Load exams on page load
+    loadExams();
+</script>
+{% endblock %}

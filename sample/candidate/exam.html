@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}{{ exam.title }} - Taking Exam{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/candidate.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="exam-container">
+    <!-- Header with timer and progress -->
+    <header class="exam-header">
+        <div class="exam-title-section">
+            <h2>{{ exam.title }}</h2>
+        </div>
+        <div class="exam-info">
+            <div class="timer-display" id="timerDisplay">
+                <span>⏱️</span>
+                <span id="timer">{{ exam.duration }}:00</span>
+            </div>
+            <div class="progress-indicator">
+                <span id="progress">Question 1 of {{ exam.num_questions }}</span>
+            </div>
+            <div class="proctoring-indicator">
+                <span class="proctoring-dot"></span>
+                <span>Monitored</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Exam content -->
+    <main class="exam-content">
+        <div id="questionContainer">
+            <!-- Questions will be rendered here -->
+        </div>
+
+        <!-- Navigation -->
+        <div class="exam-navigation">
+            <button class="btn btn-secondary" id="prevBtn" onclick="previousQuestion()" style="display: none;">
+                Previous
+            </button>
+            <button class="btn btn-primary" id="nextBtn" onclick="nextQuestion()">
+                Next
+            </button>
+            <button class="btn btn-primary" id="submitBtn" onclick="submitExam()" style="display: none;">
+                Submit Exam
+            </button>
+        </div>
+    </main>
+
+    <!-- Hidden webcam for proctoring -->
+    <video id="proctoringWebcam" style="display: none;" autoplay></video>
+    <canvas id="proctoringCanvas" style="display: none;"></canvas>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/proctoring.js') }}"></script>
+<script src="{{ url_for('static', filename='js/recorder.js') }}"></script>
+<script>
+    // Exam data
+    const examData = {
+        id: {{ exam.id }},
+    duration: { { exam.duration } },
+    type: '{{ exam.exam_type }}',
+        questions: { { questions | tojson } }
+};
+
+    let currentQuestionIndex = 0;
+    let answers = {};
+    let timeRemaining = examData.duration * 60; // Convert to seconds
+
+    // Initialize exam
+    document.addEventListener('DOMContentLoaded', () => {
+        initializeProctoring();
+        renderQuestion();
+        startTimer();
+    });
+
+    // Render current question
+    function renderQuestion() {
+        const question = examData.questions[currentQuestionIndex];
+        const container = document.getElementById('questionContainer');
+
+        let html = `
+        <div class="question-card fade-in">
+            <div class="question-number">Question ${currentQuestionIndex + 1} of ${examData.questions.length}</div>
+            <div class="question-text">${question.question}</div>
+    `;
+
+        if (examData.type === 'mcq') {
+            html += '<div class="mcq-options">';
+            question.options.forEach((option, index) => {
+                const isSelected = answers[question.id] === option;
+                html += `
+                <div class="mcq-option ${isSelected ? 'selected' : ''}" onclick="selectOption(${question.id}, '${option.replace(/'/g, "\\'")}')">
+                    <input type="radio" name="q${question.id}" value="${option}" ${isSelected ? 'checked' : ''}>
+                    <label>${option}</label>
+                </div>
+            `;
+            });
+            html += '</div>';
+        } else if (examData.type === 'descriptive') {
+            const savedAnswer = answers[question.id] || '';
+            html += `
+            <textarea class="descriptive-answer" id="answer-${question.id}" placeholder="Type your answer here...">${savedAnswer}</textarea>
+        `;
+        } else if (examData.type === 'voice') {
+            html += `
+            <div class="recording-interface">
+                <div class="waveform" id="waveform-${question.id}">
+                    ${Array(20).fill('<div class="waveform-bar" style="height: 10px;"></div>').join('')}
+                </div>
+                <div class="recording-controls">
+                    <button class="record-button" id="recordBtn-${question.id}" onclick="toggleRecording(${question.id}, 'audio')">
+                        🎤
+                    </button>
+                </div>
+                <div class="recording-status" id="status-${question.id}">Click to start recording</div>
+            </div>
+        `;
+        } else if (examData.type === 'webcam') {
+            html += `
+            <div class="recording-interface">
+                <div class="recording-preview">
+                    <video id="preview-${question.id}" autoplay muted></video>
+                </div>
+                <div class="recording-controls">
+                    <button class="record-button" id="recordBtn-${question.id}" onclick="toggleRecording(${question.id}, 'video')">
+                        📹
+                    </button>
+                </div>
+                <div class="recording-status" id="status-${question.id}">Click to start recording</div>
+            </div>
+        `;
+        }
+
+        html += '</div>';
+        container.innerHTML = html;
+
+        // Update navigation buttons
+        document.getElementById('prevBtn').style.display = currentQuestionIndex > 0 ? 'block' : 'none';
+        document.getElementById('nextBtn').style.display = currentQuestionIndex < examData.questions.length - 1 ? 'block' : 'none';
+        document.getElementById('submitBtn').style.display = currentQuestionIndex === examData.questions.length - 1 ? 'block' : 'none';
+
+        // Update progress
+        document.getElementById('progress').textContent = `Question ${currentQuestionIndex + 1} of ${examData.questions.length}`;
+
+        // Initialize media preview for webcam
+        if (examData.type === 'webcam') {
+            initializeWebcamPreview(question.id);
+        }
+    }
+
+    // Select MCQ option
+    function selectOption(questionId, option) {
+        answers[questionId] = option;
+        renderQuestion();
+    }
+
+    // Save descriptive answer
+    function saveDescriptiveAnswer() {
+        const question = examData.questions[currentQuestionIndex];
+        const textarea = document.getElementById(`answer-${question.id}`);
+        if (textarea) {
+            answers[question.id] = textarea.value;
+        }
+    }
+
+    // Navigation
+    function nextQuestion() {
+        if (examData.type === 'descriptive') {
+            saveDescriptiveAnswer();
+        }
+
+        if (currentQuestionIndex < examData.questions.length - 1) {
+            currentQuestionIndex++;
+            renderQuestion();
+        }
+    }
+
+    function previousQuestion() {
+        if (examData.type === 'descriptive') {
+            saveDescriptiveAnswer();
+        }
+
+        if (currentQuestionIndex > 0) {
+            currentQuestionIndex--;
+            renderQuestion();
+        }
+    }
+
+    // Timer
+    function startTimer() {
+        const timerDisplay = document.getElementById('timerDisplay');
+        const timerElement = document.getElementById('timer');
+
+        const interval = setInterval(() => {
+            timeRemaining--;
+
+            const minutes = Math.floor(timeRemaining / 60);
+            const seconds = timeRemaining % 60;
+            timerElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+            // Warning states
+            if (timeRemaining <= 60) {
+                timerDisplay.classList.add('danger');
+            } else if (timeRemaining <= 300) {
+                timerDisplay.classList.add('warning');
+            }
+
+            // Auto-submit when time expires
+            if (timeRemaining <= 0) {
+                clearInterval(interval);
+                alert('Time is up! Submitting your exam...');
+                submitExam();
+            }
+        }, 1000);
+    }
+
+    // Submit exam
+    async function submitExam() {
+        if (!confirm('Are you sure you want to submit your exam? This action cannot be undone.')) {
+            return;
+        }
+
+        // Save current answer if descriptive
+        if (examData.type === 'descriptive') {
+            saveDescriptiveAnswer();
+        }
+
+        // Prepare answers data
+        const answersData = examData.questions.map(q => ({
+            question_id: q.id,
+            answer_text: answers[q.id] || ''
+        }));
+
+        try {
+            const response = await fetch(`/exam/${examData.id}/submit`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ answers: answersData })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                window.location.href = data.redirect;
+            } else {
+                alert('Error submitting exam: ' + data.message);
+            }
+        } catch (error) {
+            alert('Error submitting exam. Please try again.');
+        }
+    }
+
+    // Prevent page reload/close
+    window.addEventListener('beforeunload', (e) => {
+        e.preventDefault();
+        e.returnValue = '';
+    });
+</script>
+{% endblock %}

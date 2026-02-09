@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}{{ exam.title }} - Exam Platform{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/candidate.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="candidate-container">
+    <div class="candidate-card fade-in">
+        <div class="candidate-header">
+            <h1>{{ exam.title }}</h1>
+            <p>{{ exam.exam_type|upper }} Exam • {{ exam.num_questions }} Questions • {{ exam.duration }} Minutes</p>
+        </div>
+
+        <div id="errorMessage" class="alert alert-error" style="display: none;"></div>
+
+        <form id="registerForm">
+            <div class="form-group">
+                <label for="name" class="form-label">Full Name</label>
+                <input type="text" id="name" name="name" required autofocus placeholder="Enter your full name">
+            </div>
+
+            <div class="form-group">
+                <label for="email" class="form-label">Email Address</label>
+                <input type="email" id="email" name="email" required placeholder="Enter your email address">
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="submitBtn" style="width: 100%;">
+                Get OTP
+            </button>
+        </form>
+
+        <p class="text-center text-muted mt-4" style="font-size: 0.875rem; margin-bottom: 0;">
+            You will receive a One-Time Password via email to verify your identity
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const formData = new FormData(e.target);
+        const submitBtn = document.getElementById('submitBtn');
+        const errorMessage = document.getElementById('errorMessage');
+
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner"></span> Sending OTP...';
+        errorMessage.style.display = 'none';
+
+        try {
+            const response = await fetch('{{ url_for("candidate.register", exam_id=exam.id) }}', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                // Redirect to OTP page
+                window.location.href = '{{ url_for("candidate.otp_page", exam_id=exam.id) }}';
+            } else {
+                errorMessage.textContent = data.message;
+                errorMessage.style.display = 'block';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Get OTP';
+            }
+        } catch (error) {
+            errorMessage.textContent = 'An error occurred. Please try again.';
+            errorMessage.style.display = 'block';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Get OTP';
+        }
+    });
+</script>
+{% endblock %}

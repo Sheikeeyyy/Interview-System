@@ -126,6 +126,17 @@ def ensure_webcam_tables():
 
 ensure_webcam_tables()
 
+# ✅ Ensure transcript column exists
+def ensure_webcam_transcript_column():
+    with get_db() as con:
+        cols = con.execute("PRAGMA table_info(webcam_answers)").fetchall()
+        names = [c["name"] for c in cols]
+        if "transcript" not in names:
+            con.execute("ALTER TABLE webcam_answers ADD COLUMN transcript TEXT")
+            print("✅ Added 'transcript' column to webcam_answers")
+
+ensure_webcam_transcript_column()
+
 # ---------------- AI ----------------
 llm = ChatGroq(
     api_key=os.getenv("GROQ_API_KEY"),

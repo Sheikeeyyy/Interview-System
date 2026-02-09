@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}Verify OTP - {{ exam.title }}{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/candidate.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="candidate-container">
+    <div class="candidate-card fade-in">
+        <div class="candidate-header">
+            <h1>Verify OTP</h1>
+            <p>Enter the 6-digit code sent to your email</p>
+        </div>
+
+        <div id="errorMessage" class="alert alert-error" style="display: none;"></div>
+
+        <form id="otpForm">
+            <div class="otp-input-group">
+                <input type="text" class="otp-digit" maxlength="1" id="otp1" autofocus>
+                <input type="text" class="otp-digit" maxlength="1" id="otp2">
+                <input type="text" class="otp-digit" maxlength="1" id="otp3">
+                <input type="text" class="otp-digit" maxlength="1" id="otp4">
+                <input type="text" class="otp-digit" maxlength="1" id="otp5">
+                <input type="text" class="otp-digit" maxlength="1" id="otp6">
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="verifyBtn" style="width: 100%;">
+                Verify & Start Exam
+            </button>
+        </form>
+
+        <div class="otp-timer">
+            <p id="timerText">OTP expires in <span id="timer">5:00</span></p>
+        </div>
+
+        <p class="text-center mt-3">
+            <a href="{{ url_for('candidate.landing', exam_id=exam.id) }}" class="text-secondary"
+                style="font-size: 0.875rem;">
+                Didn't receive OTP? Go back and try again
+            </a>
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // OTP input handling
+    const otpInputs = document.querySelectorAll('.otp-digit');
+
+    otpInputs.forEach((input, index) => {
+        input.addEventListener('input', (e) => {
+            if (e.target.value.length === 1 && index < otpInputs.length - 1) {
+                otpInputs[index + 1].focus();
+            }
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace' && e.target.value === '' && index > 0) {
+                otpInputs[index - 1].focus();
+            }
+        });
+
+        // Only allow numbers
+        input.addEventListener('keypress', (e) => {
+            if (!/[0-9]/.test(e.key)) {
+                e.preventDefault();
+            }
+        });
+    });
+
+    // Timer countdown
+    let timeLeft = 300; // 5 minutes in seconds
+    const timerElement = document.getElementById('timer');
+
+    const countdown = setInterval(() => {
+        timeLeft--;
+        const minutes = Math.floor(timeLeft / 60);
+        const seconds = timeLeft % 60;
+        timerElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+        if (timeLeft <= 0) {
+            clearInterval(countdown);
+            document.getElementById('timerText').innerHTML = '<span style="color: var(--error);">OTP expired. Please request a new one.</span>';
+            document.getElementById('verifyBtn').disabled = true;
+        }
+    }, 1000);
+
+    // Form submission
+    document.getElementById('otpForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const otp = Array.from(otpInputs).map(input => input.value).join('');
+
+        if (otp.length !== 6) {
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.textContent = 'Please enter all 6 digits';
+            errorMessage.style.display = 'block';
+            return;
+        }
+
+        const verifyBtn = document.getElementById('verifyBtn');
+        const errorMessage = document.getElementById('errorMessage');
+
+        verifyBtn.disabled = true;
+        verifyBtn.innerHTML = '<span class="spinner"></span> Verifying...';
+        errorMessage.style.display = 'none';
+
+        try {
+            const formData = new FormData();
+            formData.append('otp', otp);
+
+            const response = await fetch('{{ url_for("candidate.verify_otp", exam_id=exam.id) }}', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                window.location.href = data.redirect;
+            } else {
+                errorMessage.textContent = data.message;
+                errorMessage.style.display = 'block';
+                verifyBtn.disabled = false;
+                verifyBtn.textContent = 'Verify & Start Exam';
+
+                // Clear OTP inputs
+                otpInputs.forEach(input => input.value = '');
+                otpInputs[0].focus();
+            }
+        } catch (error) {
+            errorMessage.textContent = 'An error occurred. Please try again.';
+            errorMessage.style.display = 'block';
+            verifyBtn.disabled = false;
+            verifyBtn.textContent = 'Verify & Start Exam';
+        }
+    });
+</script>
+{% endblock %}
