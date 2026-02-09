@@ -421,3 +421,73 @@
         text-align: left;
     }
 }
+
+/* ==================== EVALUATION PAGE FIXES (ROBUST) ==================== */
+
+/* 1. Force Card Body Text Color */
+.card-body,
+.card-body p,
+.card-body div,
+.card-body span {
+    color: #e2e8f0 !important;
+    /* Light Gray */
+}
+
+/* 2. Headings (Questions & Titles) */
+h3,
+h4,
+h5,
+h6,
+.card-body h5,
+.card-body h6 {
+    color: #ffffff !important;
+    /* Pure White */
+    font-weight: 600;
+}
+
+/* 3. Transcript & Alert Boxes */
+.card-body .alert,
+.card-body .alert-light {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: #f1f5f9 !important;
+    /* Bright White-Gray */
+}
+
+/* 4. AI Feedback & Metadata (Override text-muted) */
+.card-body .text-muted,
+.card-body .text-muted button {
+    color: #94a3b8 !important;
+    /* Lighter Gray (readable on dark) */
+}
+
+/* 5. Strong Text (Labels like "Transcript:", "Reason:") */
+.card-body strong,
+.card-body b {
+    color: #60a5fa !important;
+    /* Light Blue for emphasis */
+}
+
+/* 6. Form Labels & Inputs */
+.card-body label {
+    color: #ffffff !important;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    display: block;
+}
+
+.card-body input[type="number"] {
+    background-color: #0f172a !important;
+    /* Very Dark Blue */
+    border: 1px solid #334155 !important;
+    color: #ffffff !important;
+    font-weight: bold;
+}
+
+/* 7. Fix Webcam Section Specifics */
+.video-container,
+video {
+    border: 1px solid #475569;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}

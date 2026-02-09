@@ -1,57 +1,55 @@
 {% extends "base.html" %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
 {% block content %}
 <h3>Evaluate Candidate</h3>
 
 <form method="POST" action="/evaluate/save/{{ submission.id }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-{% for i in range(questions|length) %}
-<div class="card mb-4 shadow-sm">
+  {% for i in range(questions|length) %}
+  <div class="card mb-4 shadow-sm">
     <div class="card-body">
 
-        <h5>Q{{ i+1 }}. {{ questions[i].question }}</h5>
+      <h5>Q{{ i+1 }}. {{ questions[i].question }}</h5>
 
-        {% if audio_map.get(i|string) %}
-    <audio controls class="w-100 mt-2" preload="metadata">
-        <source
-            src="{{ url_for('admin_audio', filename=audio_map[i|string]) }}"
-            type="audio/wav"
-        >
+      {% if audio_map.get(i|string) %}
+      <audio controls class="w-100 mt-2" preload="metadata">
+        <source src="{{ url_for('admin_audio', filename=audio_map[i|string]) }}" type="audio/wav">
         Your browser does not support audio playback.
-    </audio>
-{% endif %}
+      </audio>
+      {% endif %}
 
 
-<p class="mt-3"><strong>Transcript:</strong></p>
+      <p class="mt-3"><strong>Transcript:</strong></p>
 
-<div class="alert alert-light border">
-  {% if submission.exam_type == "webcam" %}
-      {{ webcam_rows[i].transcript if webcam_rows[i].transcript else "No transcript available" }}
-  {% else %}
-      {{ answers[i|string] }}
-  {% endif %}
-</div>
+      <div class="alert alert-light border">
+        {% if submission.exam_type == "webcam" %}
+        {{ webcam_rows[i].transcript if webcam_rows[i].transcript else "No transcript available" }}
+        {% else %}
+        {{ answers[i|string] }}
+        {% endif %}
+      </div>
 
 
-        <p class="text-muted">
-            AI Score: {{ feedback[i|string].score }} / 5  
-            <br>
-            Reason: {{ feedback[i|string].reason }}
-        </p>
+      <p class="text-muted">
+        AI Score: {{ feedback[i|string].score }} / 5
+        <br>
+        Reason: {{ feedback[i|string].reason }}
+      </p>
 
-        <label>Final Marks (0–5)</label>
-        <input type="number"
-               name="{{ i }}"
-               value="{{ feedback[i|string].score }}"
-               min="0" max="5"
-               class="form-control"
-               required>
+      <label>Final Marks (0–5)</label>
+      <input type="number" name="{{ i }}" value="{{ feedback[i|string].score }}" min="0" max="5" class="form-control"
+        required>
 
     </div>
-</div>
-{% endfor %}
+  </div>
+  {% endfor %}
 
-<button class="btn btn-success btn-lg">Save Final Evaluation</button>
+  <button class="btn btn-success btn-lg">Save Final Evaluation</button>
 </form>
 {% if webcam_rows %}
 <hr>
@@ -66,13 +64,12 @@
 
     <video width="420" controls preload="metadata">
 
-      <source src="{{ url_for('admin_video', filename=row.video_file) }}"
-              type="video/webm">
+      <source src="{{ url_for('admin_video', filename=row.video_file) }}" type="video/webm">
     </video>
     <p class="mt-2"><strong>Transcript:</strong></p>
-<div class="alert alert-light border">
-  {{ row.transcript or "No transcript available" }}
-</div>
+    <div class="alert alert-light border">
+      {{ row.transcript or "No transcript available" }}
+    </div>
 
 
     <div class="text-muted mt-2">
