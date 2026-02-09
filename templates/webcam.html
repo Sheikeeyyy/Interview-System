@@ -1,0 +1,588 @@
+{% extends "base.html" %}
+{% block title %}Webcam Interview{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/candidate.css') }}">
+{% endblock %}
+
+{% block content %}
+<!-- ✅ FULLSCREEN PROCTOR LAYOUT -->
+
+<input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
+<input type="hidden" id="test_id" value="{{ test_id }}">
+<input type="hidden" id="submission_id" value="">
+<input type="hidden" id="candidate" value="{{ session.get('candidate','') }}">
+<div style="
+position:fixed;
+inset:0;
+background:#111;
+z-index:0;">
+</div>
+
+<video id="preview" autoplay muted playsinline style="
+position:fixed;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+width:820px;
+
+max-width:95vw;
+height:auto;
+border-radius:16px;
+box-shadow:0 0 40px rgba(0,0,0,0.6);
+background:black;
+z-index:1;">
+</video>
+
+<div id="questionBox" style="
+position:fixed;
+top:20px;
+left:50%;
+transform:translateX(-50%);
+background:rgba(0,0,0,.65);
+backdrop-filter: blur(8px);
+color:white;
+padding:16px 26px;
+border-radius:16px;
+font-size:20px;
+max-width:900px;
+width:90%;
+text-align:center;
+z-index:5;">
+  Loading question...
+</div>
+
+<div id="questionCounter" style="position:fixed; top:90px; left:50%;
+transform:translateX(-50%); color:#ddd; z-index:5;"></div>
+
+<div style="position:fixed; top:20px; right:20px;
+background:black; color:#00ff88; padding:10px 16px;
+border-radius:10px; z-index:5;">
+  ⏱ <span id="timer">00:00</span>
+</div>
+
+<div id="warningOverlay" style="display:none; position:fixed; top:140px; left:50%;
+transform:translateX(-50%); background:red; color:white;
+padding:12px 18px; border-radius:10px; z-index:6;">
+  ⚠ WARNING — Focus on screen
+</div>
+
+<p id="status" style="position:fixed; bottom:100px; left:50%;font-size:16px;
+
+transform:translateX(-50%);
+color:white; background:rgba(0,0,0,.6);
+padding:8px 14px; border-radius:8px; z-index:5;">
+  Starting camera...
+</p>
+
+<button id="prevBtn" class="btn btn-secondary btn-lg" style="position:fixed; bottom:30px; left:30px; z-index:5;">
+
+  ⬅ Prev
+</button>
+
+<button id="nextBtn" class="btn btn-primary btn-lg" style="position:fixed; bottom:30px; right:30px; z-index:5;">
+  Next ➡
+</button>
+
+<button id="stopBtn" class="btn btn-danger btn-lg" style="position:fixed; bottom:30px; left:50%;
+transform:translateX(-50%); z-index:5;">
+  Finish Interview
+</button>
+
+
+<!-- ✅ MediaPipe FaceMesh -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.min.js"></script>
+
+<script>
+  /* ---------------- QUESTIONS ---------------- */
+  const QUESTIONS = {{ questions| tojson }};
+  console.log("QUESTIONS:", QUESTIONS);
+
+  let qIndex = 0;
+
+  /* ---------------- STATE ---------------- */
+  let recordStartTime = 0;
+
+  let stream = null;
+  let recorder = null;
+  let isSaving = false;   // ✅ ADD THIS LINE
+
+
+  let chunks = [];
+  let seconds = 0;
+  let timerInterval = null;
+
+  /* Proctoring */
+  let calibratedCenterX = null;
+  let calibratedCenterY = null;
+
+  let gazeAwayStart = null;
+  const GAZE_AWAY_SECONDS = 1;
+
+  let lastWarningTime = 0;
+  const WARNING_COOLDOWN_MS = 1000;
+
+  /* ✅ Less sensitive tolerance */
+  const toleranceX = 0.10;
+  const toleranceY = 0.12;
+
+  /* ---------------- ELEMENTS ---------------- */
+  const questionBox = document.getElementById("questionBox");
+  const questionCounter = document.getElementById("questionCounter");
+  const prevBtn = document.getElementById("prevBtn");
+  const nextBtn = document.getElementById("nextBtn");
+
+  const preview = document.getElementById("preview");
+
+  const statusEl = document.getElementById("status");
+  const timerEl = document.getElementById("timer");
+  const stopBtn = document.getElementById("stopBtn");
+
+  const warningOverlay = document.getElementById("warningOverlay");
+
+  /* Screenshot canvas */
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+
+  /* ---------------- HELPERS ---------------- */
+  function formatTime(sec) {
+    const m = String(Math.floor(sec / 60)).padStart(2, "0");
+    const s = String(sec % 60).padStart(2, "0");
+    return `${m}:${s}`;
+  }
+
+  function startTimer() {
+    stopTimer();
+    seconds = 0;
+    timerEl.innerText = formatTime(seconds);
+
+    timerInterval = setInterval(() => {
+      seconds++;
+      timerEl.innerText = formatTime(seconds);
+    }, 1000);
+  }
+
+  function stopTimer() {
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = null;
+  }
+
+  function renderQuestion() {
+    if (!QUESTIONS || QUESTIONS.length === 0) {
+      questionBox.innerHTML = "⚠ No questions found.";
+      questionCounter.innerText = "";
+      prevBtn.disabled = true;
+      nextBtn.disabled = true;
+      return;
+    }
+
+    questionBox.innerHTML = `<b>Q${qIndex + 1}.</b> ${QUESTIONS[qIndex].question}`;
+    if (questionCounter) {
+      questionCounter.innerText = `Question ${qIndex + 1} / ${QUESTIONS.length}`;
+    }
+
+    prevBtn.disabled = (qIndex === 0);
+    nextBtn.disabled = (qIndex === QUESTIONS.length - 1);
+  }
+
+  function showWarning(show) {
+    warningOverlay.style.display = show ? "block" : "none";
+  }
+
+  function getMimeType() {
+    const types = [
+      "video/webm;codecs=vp8",
+      "video/webm",
+    ];
+    for (const t of types) {
+      if (MediaRecorder.isTypeSupported(t)) return t;
+    }
+    return "video/webm";
+  }
+
+  /* ✅ screenshot */
+  function captureScreenshotBase64() {
+    if (!preview.videoWidth) return null;
+    canvas.width = preview.videoWidth || 640;
+    canvas.height = preview.videoHeight || 480;
+    ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.9);
+  }
+
+  /* ✅ send warning to flask */
+  async function sendWarning(reason, faceCount, gazeX = null, gazeY = null) {
+    console.log("⚠ Sending warning:", reason);
+    const now = Date.now();
+    if (now - lastWarningTime < WARNING_COOLDOWN_MS) return;
+    lastWarningTime = now;
+
+    const testId = document.getElementById("test_id").value;
+    const candidate = document.getElementById("candidate").value.trim();
+    if (!candidate) return;
+
+    const csrfToken = document.getElementById("csrf_token").value;
+    const screenshot = captureScreenshotBase64();
+    if (!screenshot) return;
+    const payload = {
+      candidate: candidate,
+      reason: reason,
+      face_count: faceCount,
+      gaze_x: gazeX,
+      gaze_y: gazeY,
+      screenshot_base64: screenshot
+    };
+
+    try {
+      await fetch(`/proctor_warning/${testId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": csrfToken
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch (e) {
+      console.log("❌ Warning upload failed:", e);
+    }
+  }
+
+  /* ---------------- CAMERA + PROCTOR ---------------- */
+  async function startCameraWithProctor() {
+    statusEl.innerText = "⏳ Starting camera...";
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    } catch (err) {
+      console.log("Mic not available, video only:", err);
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      statusEl.innerText = "⚠ Microphone not available. Recording video only.";
+    }
+
+    preview.srcObject = stream;
+
+    const faceMesh = new FaceMesh({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+    });
+
+    faceMesh.setOptions({
+      maxNumFaces: 2,
+      refineLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    const LEFT_EYE_CORNER = [33, 133];
+    const RIGHT_EYE_CORNER = [362, 263];
+
+    const LEFT_IRIS = [468, 469, 470, 471];
+    const RIGHT_IRIS = [472, 473, 474, 475];
+
+    const LEFT_EYE_TOP_BOTTOM = [159, 145];
+    const RIGHT_EYE_TOP_BOTTOM = [386, 374];
+
+    function irisHorizontalRatio(face, iris, eye) {
+      const irisX = iris.map(i => face[i].x).reduce((a, b) => a + b, 0) / iris.length;
+      const left = face[eye[0]].x;
+      const right = face[eye[1]].x;
+      return (irisX - left) / (right - left);
+    }
+
+    function irisVerticalRatio(face, iris, eyeTB) {
+      const irisY = iris.map(i => face[i].y).reduce((a, b) => a + b, 0) / iris.length;
+      const top = face[eyeTB[0]].y;
+      const bottom = face[eyeTB[1]].y;
+      return (irisY - top) / (bottom - top);
+    }
+
+    faceMesh.onResults(async (results) => {
+      const faces = results.multiFaceLandmarks || [];
+      const faceCount = faces.length;
+
+      let warningReason = null;
+      let gazeX = null;
+      let gazeY = null;
+
+      if (faceCount === 0) warningReason = "NO_FACE";
+      if (faceCount >= 2) warningReason = "MULTIPLE_FACES";
+
+      if (faceCount === 1) {
+        const face = faces[0];
+
+        const leftX = irisHorizontalRatio(face, LEFT_IRIS, LEFT_EYE_CORNER);
+        const rightX = irisHorizontalRatio(face, RIGHT_IRIS, RIGHT_EYE_CORNER);
+
+        gazeX = (leftX + rightX) / 2;
+
+        /* ✅ FIX MIRROR ISSUE */
+        gazeX = 1 - gazeX;
+
+        const leftY = irisVerticalRatio(face, LEFT_IRIS, LEFT_EYE_TOP_BOTTOM);
+        const rightY = irisVerticalRatio(face, RIGHT_IRIS, RIGHT_EYE_TOP_BOTTOM);
+        gazeY = (leftY + rightY) / 2;
+
+        if (calibratedCenterX === null && calibratedCenterY === null) {
+          calibratedCenterX = gazeX;
+          calibratedCenterY = gazeY;
+        }
+
+        if (calibratedCenterX !== null && calibratedCenterY !== null) {
+          if (gazeX < calibratedCenterX - toleranceX) warningReason = "LOOKING_LEFT";
+          else if (gazeX > calibratedCenterX + toleranceX) warningReason = "LOOKING_RIGHT";
+          else if (gazeY < calibratedCenterY - toleranceY) warningReason = "LOOKING_UP";
+          else if (gazeY > calibratedCenterY + toleranceY) warningReason = "LOOKING_DOWN";
+        }
+      }
+
+      if (warningReason) {
+        if (!gazeAwayStart) gazeAwayStart = Date.now();
+        const diff = (Date.now() - gazeAwayStart) / 1000;
+
+        if (diff >= GAZE_AWAY_SECONDS) {
+          showWarning(true);
+          await sendWarning(warningReason, faceCount, gazeX, gazeY);
+        }
+      } else {
+        gazeAwayStart = null;
+        showWarning(false);
+      }
+    });
+
+    const camera = new Camera(preview, {
+      onFrame: async () => {
+        await faceMesh.send({ image: preview });
+      },
+      width: 700,
+      height: 450
+    });
+
+    camera.start();
+  }
+
+  /* ---------------- RECORDING ---------------- */
+  function startRecording() {
+    if (!stream) return;
+
+    recordStartTime = Date.now(); // ✅ REQUIRED
+
+    chunks = [];
+    recorder = new MediaRecorder(stream, { mimeType: getMimeType() });
+
+    recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) {
+        chunks.push(e.data);
+      }
+    };
+
+    recorder.start();
+    startTimer();
+  }
+
+  async function stopRecordingAndGetBlob() {
+    return new Promise((resolve) => {
+
+      if (!recorder || recorder.state !== "recording") {
+        resolve(null);
+        return;
+      }
+
+      recorder.onstop = () => {
+        stopTimer();
+
+        if (!chunks.length) {
+          resolve(null);
+          return;
+        }
+
+        const blob = new Blob(chunks, { type: "video/webm" });
+
+        // ✅ HARD SAFETY CHECK
+        if (blob.size < 100000) { // ~1 second minimum
+          resolve(null);
+          return;
+        }
+
+        resolve(blob);
+      };
+
+      recorder.stop(); // ✅ CLEAN STOP ONLY
+    });
+  }
+
+  /* ---------------- UPLOAD QUESTION VIDEO ---------------- */
+  async function uploadQuestionVideo(blob) {
+    const testId = document.getElementById("test_id").value;
+    const submissionIdInput = document.getElementById("submission_id");
+    const csrfToken = document.getElementById("csrf_token").value;
+
+    const fd = new FormData();
+    fd.append("submission_id", submissionIdInput.value);
+    fd.append("question_index", qIndex);
+    fd.append("question_text", QUESTIONS[qIndex].question);
+    fd.append("video", blob, `q${qIndex + 1}.webm`);
+
+    const res = await fetch(`/upload_video_question/${testId}`, {
+      method: "POST",
+      headers: { "X-CSRFToken": csrfToken },
+      body: fd
+    });
+
+    const data = await res.json();
+
+    if (!data.ok) {
+      alert("❌ Upload failed");
+      return false;
+    }
+
+    submissionIdInput.value = data.submission_id;
+    return true; // ✅ IMPORTANT
+  }
+
+  /* ---------------- NEXT ---------------- */
+  nextBtn.onclick = async () => {
+    if (isSaving) return;
+
+    // ✅ REQUIRE 2 SECONDS MINIMUM
+    if (Date.now() - recordStartTime < 2000) {
+      statusEl.innerText = "⚠ Please speak for at least 2 seconds";
+      return;
+    }
+
+    isSaving = true;
+    nextBtn.disabled = true;
+    prevBtn.disabled = true;
+
+    statusEl.innerText = "⏳ Saving answer...";
+
+    const blob = await stopRecordingAndGetBlob();
+
+    if (!blob) {
+      statusEl.innerText = "⚠ Recording failed. Please answer again.";
+      isSaving = false;
+      nextBtn.disabled = false;
+      startRecording();
+      return;
+    }
+
+    const ok = await uploadQuestionVideo(blob);
+    if (!ok) {
+      statusEl.innerText = "❌ Upload failed. Try again.";
+      isSaving = false;
+      nextBtn.disabled = false;
+      startRecording();
+      return;
+    }
+
+    qIndex++;
+    renderQuestion();
+
+    statusEl.innerText = `✅ Recording Q${qIndex + 1}...`;
+    startRecording();
+
+    isSaving = false;
+    nextBtn.disabled = false;
+  };
+
+  /* ---------------- PREVIOUS ---------------- */
+  prevBtn.onclick = () => {
+    alert("⚠ You cannot go back to previous questions.");
+  };
+
+
+  /* ---------------- FINISH ---------------- */
+  stopBtn.onclick = async () => {
+    if (isSaving) return;
+    isSaving = true;
+
+    stopBtn.disabled = true;
+    nextBtn.disabled = true;
+    prevBtn.disabled = true;
+
+    statusEl.innerText = "⏳ Uploading last answer...";
+
+    const blob = await stopRecordingAndGetBlob();
+    if (blob) {
+      await uploadQuestionVideo(blob);
+    }
+
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+      preview.srcObject = null;
+      stream = null;
+    }
+
+    const sid = document.getElementById("submission_id").value;
+
+    statusEl.innerHTML = `
+    ✅ Interview Completed<br><br>
+    <a class="btn btn-success" href="/result_webcam/${sid}">Finish</a>
+  `;
+  };
+
+  /* ---------------- INIT ---------------- */
+  async function init() {
+    renderQuestion();
+    await startCameraWithProctor();
+
+    statusEl.innerText = "✅ Recording Q1...";
+    startRecording();
+
+    stopBtn.disabled = false;
+  }
+  /* ---------------- TAB SWITCH DETECTION ---------------- */
+
+  document.addEventListener("visibilitychange", async () => {
+    if (document.hidden) {
+
+      warningOverlay.style.display = "block";
+      warningOverlay.innerText = "⚠ Tab switch detected!";
+
+      await sendWarning("TAB_SWITCH", 0);
+
+    }
+  });
+
+  /* window blur (alt+tab / minimize) */
+  window.addEventListener("blur", async () => {
+    await sendWarning("WINDOW_BLUR", 0);
+  });
+
+  /* fullscreen exit detection */
+  document.addEventListener("fullscreenchange", async () => {
+    if (!document.fullscreenElement) {
+
+      await sendWarning("EXIT_FULLSCREEN", 0);
+
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen();
+      }
+    }
+  });
+  /* ---------------- INPUT LOCK ---------------- */
+
+  document.addEventListener("contextmenu", e => e.preventDefault());
+  document.addEventListener("copy", e => e.preventDefault());
+  document.addEventListener("paste", e => e.preventDefault());
+
+  document.addEventListener("keydown", function (e) {
+    if (
+      e.key === "F12" ||
+      (e.ctrlKey && e.shiftKey && e.key === "I") ||
+      (e.ctrlKey && e.key === "u") ||
+      (e.altKey && e.key === "Tab")
+    ) {
+      e.preventDefault();
+    }
+  });
+
+  window.onload = () => {
+
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen();
+    }
+
+    setTimeout(init, 600);
+  };
+
+</script>
+{% endblock %}

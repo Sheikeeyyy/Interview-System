@@ -1,0 +1,20 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# Database
+database.db
+
+# Logs & generated files
+audio/
+uploads/
+results/
+proctor_logs/
+
+# Data & models
+*.xlsx
+shape_predictor_*.dat

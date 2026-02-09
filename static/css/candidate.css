@@ -1,0 +1,400 @@
+/* ==================== CANDIDATE LANDING PAGE ==================== */
+.candidate-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-lg);
+}
+
+.candidate-card {
+    width: 100%;
+    max-width: 500px;
+}
+
+.candidate-header {
+    text-align: center;
+    margin-bottom: var(--spacing-xl);
+}
+
+.candidate-header h1 {
+    font-size: 1.875rem;
+    margin-bottom: var(--spacing-sm);
+}
+
+.candidate-header p {
+    color: var(--text-secondary);
+    margin-bottom: 0;
+}
+
+/* ==================== OTP INPUT ==================== */
+.otp-input-group {
+    display: flex;
+    gap: var(--spacing-sm);
+    justify-content: center;
+    margin-bottom: var(--spacing-xl);
+}
+
+.otp-digit {
+    width: 3rem;
+    height: 3.5rem;
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 600;
+    background: var(--bg-tertiary);
+    border: 2px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    color: var(--text-primary);
+    transition: var(--transition);
+}
+
+.otp-digit:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    outline: none;
+}
+
+.otp-timer {
+    text-align: center;
+    margin-top: var(--spacing-lg);
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+}
+
+.otp-timer #timer {
+    font-weight: 600;
+    color: var(--primary-light);
+}
+
+/* ==================== EXAM INTERFACE ==================== */
+.exam-container {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-primary);
+}
+
+.exam-header {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    padding: var(--spacing-lg) var(--spacing-xl);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.exam-title-section h2 {
+    font-size: 1.25rem;
+    margin-bottom: var(--spacing-sm);
+}
+
+.exam-info {
+    display: flex;
+    gap: var(--spacing-xl);
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.timer-display {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-tertiary);
+    border-radius: var(--border-radius-sm);
+    font-weight: 600;
+}
+
+.timer-display.warning {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+}
+
+.timer-display.danger {
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+}
+
+.progress-indicator {
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+}
+
+.proctoring-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.proctoring-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    background: var(--error);
+    border-radius: 50%;
+    animation: blink 2s infinite;
+}
+
+@keyframes blink {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.3;
+    }
+}
+
+.exam-content {
+    flex: 1;
+    padding: var(--spacing-xl);
+    max-width: 900px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+/* ==================== QUESTION CARD ==================== */
+.question-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-xl);
+    margin-bottom: var(--spacing-xl);
+}
+
+.question-number {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-bottom: var(--spacing-md);
+}
+
+.question-text {
+    font-size: 1.125rem;
+    font-weight: 500;
+    margin-bottom: var(--spacing-xl);
+    line-height: 1.6;
+}
+
+/* ==================== MCQ OPTIONS ==================== */
+.mcq-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.mcq-option {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: var(--bg-tertiary);
+    border: 2px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.mcq-option:hover {
+    border-color: var(--primary);
+    background: rgba(99, 102, 241, 0.05);
+}
+
+.mcq-option.selected {
+    border-color: var(--primary);
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.mcq-option input[type="radio"] {
+    width: 1.25rem;
+    height: 1.25rem;
+    cursor: pointer;
+}
+
+.mcq-option label {
+    flex: 1;
+    cursor: pointer;
+    margin: 0;
+}
+
+/* ==================== DESCRIPTIVE ANSWER ==================== */
+.descriptive-answer {
+    width: 100%;
+    min-height: 200px;
+    padding: var(--spacing-md);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-family: inherit;
+    resize: vertical;
+}
+
+.descriptive-answer:focus {
+    border-color: var(--primary);
+    outline: none;
+}
+
+/* ==================== RECORDING INTERFACE ==================== */
+.recording-interface {
+    text-align: center;
+}
+
+.waveform {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    height: 80px;
+    margin-bottom: var(--spacing-lg);
+}
+
+.waveform-bar {
+    width: 4px;
+    background: var(--primary);
+    border-radius: 2px;
+    transition: height 0.1s ease;
+}
+
+.recording-preview {
+    margin-bottom: var(--spacing-lg);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    background: var(--bg-tertiary);
+}
+
+.recording-preview video {
+    width: 100%;
+    max-width: 500px;
+    border-radius: var(--border-radius);
+}
+
+.recording-controls {
+    margin-bottom: var(--spacing-md);
+}
+
+.record-button {
+    width: 4rem;
+    height: 4rem;
+    border-radius: 50%;
+    border: none;
+    background: var(--error);
+    color: white;
+    font-size: 2rem;
+    cursor: pointer;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.record-button:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+}
+
+.record-button.recording {
+    animation: pulse 1.5s infinite;
+}
+
+.recording-status {
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+}
+
+/* ==================== EXAM NAVIGATION ==================== */
+.exam-navigation {
+    display: flex;
+    gap: var(--spacing-md);
+    justify-content: flex-end;
+    margin-top: var(--spacing-xl);
+}
+
+/* ==================== CONFIRMATION PAGE ==================== */
+.confirmation-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-lg);
+}
+
+.confirmation-card {
+    width: 100%;
+    max-width: 600px;
+    text-align: center;
+}
+
+.confirmation-icon {
+    font-size: 5rem;
+    margin-bottom: var(--spacing-lg);
+    animation: scaleIn 0.5s ease-out;
+}
+
+@keyframes scaleIn {
+    from {
+        transform: scale(0);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.confirmation-card h1 {
+    color: var(--success);
+    margin-bottom: var(--spacing-md);
+}
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 768px) {
+    .exam-header {
+        padding: var(--spacing-md);
+    }
+
+    .exam-info {
+        gap: var(--spacing-md);
+    }
+
+    .exam-content {
+        padding: var(--spacing-md);
+    }
+
+    .question-card {
+        padding: var(--spacing-lg);
+    }
+
+    .otp-digit {
+        width: 2.5rem;
+        height: 3rem;
+        font-size: 1.25rem;
+    }
+
+    .exam-navigation {
+        flex-direction: column;
+    }
+
+    .exam-navigation .btn {
+        width: 100%;
+    }
+}

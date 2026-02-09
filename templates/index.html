@@ -1,0 +1,557 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard - Exam Platform{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Header -->
+    <header class="dashboard-header">
+        <div class="dashboard-logo">Exam Platform</div>
+        <div class="dashboard-user">
+            <span class="user-name">{{ session.get('admin', 'Admin') }}</span>
+            <a href="/logout" class="btn btn-secondary btn-sm">Logout</a>
+        </div>
+    </header>
+
+    <!-- Main content -->
+    <main class="dashboard-main">
+        <div class="container">
+            <!-- Tabs -->
+            <div class="dashboard-tabs">
+                <button class="tab-button active" data-tab="create">Create Exam</button>
+                <button class="tab-button" data-tab="exams">Active Exams</button>
+                <button class="tab-button" data-tab="results">Results</button>
+            </div>
+
+            <!-- Create Exam Tab -->
+            <div class="tab-content active" id="create-tab">
+                <div class="create-exam-form">
+                    <h2>Create New Exam</h2>
+                    <p class="text-secondary mb-4">Generate AI-powered exam questions from your documents</p>
+
+                    <form method="POST" action="/create" enctype="multipart/form-data">
+                        {{ form.hidden_tag() }}
+
+                        <div class="form-group">
+                            <label for="title" class="form-label">Exam Title</label>
+                            {{ form.title(class="", id="title", placeholder="e.g., Python Programming Assessment") }}
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="exam_type" class="form-label">Exam Type</label>
+                                {{ form.exam_type(class="", id="exam_type") }}
+                            </div>
+
+                            <div class="form-group">
+                                <label for="duration" class="form-label">Duration (minutes)</label>
+                                {{ form.duration(class="", id="duration", min="5", max="180") }}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="num" class="form-label">Number of Questions</label>
+                            {{ form.num(class="", id="num", min="1", max="50") }}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Upload Document (Optional)</label>
+                            <div class="file-upload-area" id="fileUploadArea"
+                                onclick="document.getElementById('document').click()">
+                                <div class="file-upload-icon">📄</div>
+                                <div class="file-upload-text">Click to upload PDF or DOCX</div>
+                                <div class="file-name" id="fileName"></div>
+                            </div>
+                            {{ form.file(id="document", style="display: none;", onchange="handleFileSelect(event)") }}
+                            <small class="text-muted">Optional – leave empty to auto-generate questions</small>
+                        </div>
+
+                        {{ form.submit(class="btn btn-primary", id="createBtn") }}
+                    </form>
+                </div>
+            </div>
+
+            <!-- Active Exams Tab -->
+            <div class="tab-content" id="exams-tab">
+                <div class="flex justify-between items-center mb-4">
+                    <h2>Active Exams</h2>
+                    <button class="btn btn-secondary btn-sm" onclick="location.reload()">
+                        <span>↻</span> Refresh
+                    </button>
+                </div>
+                <div class="exams-grid" id="examsGrid">
+                    {% if tests %}
+                    {% for t in tests %}
+                    <div class="exam-card fade-in">
+                        <div class="exam-card-header">
+                            <div>
+                                <h3 class="exam-title">{{ t.title }}</h3>
+                                <span class="exam-type-badge exam-type-{{ t.exam_type }}">{{ t.exam_type }}</span>
+                            </div>
+                        </div>
+                        <div class="exam-meta">
+                            <div>📊 {{ t.question_count }} questions</div>
+                            <div>⏱️ {{ t.duration }} minutes</div>
+                        </div>
+                        <div class="exam-link-section">
+                            <label class="form-label">Shareable Link</label>
+                            <div class="exam-link-input">
+                                <input type="text" value="{{ request.url_root }}exam/{{ t.id }}" readonly
+                                    id="link-{{ t.id }}">
+                                <button class="btn btn-secondary btn-sm" onclick="copyLink('{{ t.id }}')">Copy</button>
+                            </div>
+                        </div>
+                        <div class="exam-actions" style="margin-top: 12px;">
+                            <button class="btn btn-primary btn-sm"
+                                onclick="viewExamResults('{{ t.id }}', '{{ t.title }}')">
+                                📊 View Results
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📝</div>
+                        <h3>No exams yet</h3>
+                        <p>Create your first exam to get started</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Results Tab -->
+            <div class="tab-content" id="results-tab">
+                <div class="results-container">
+                    <!-- Filter Header with Toggle -->
+                    <div class="filter-header"
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h2 style="margin: 0;">Exam Results</h2>
+                        <button class="btn btn-secondary" onclick="toggleFilterPanel()">
+                            🔍 Filters <span id="filterToggleIcon">▼</span>
+                        </button>
+                    </div>
+
+                    <!-- Advanced Filter Panel -->
+                    <div id="advancedFilterPanel" class="advanced-filter-panel"
+                        style="display: none; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+                        <h3 style="margin-top: 0; font-size: 18px; margin-bottom: 20px;">🔍 Filter Results</h3>
+
+                        <div class="filter-grid"
+                            style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                            <div class="filter-row">
+                                <label
+                                    style="display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px;">Exam
+                                    Name:</label>
+                                <input type="text" id="filterExamName" placeholder="Search by exam name..."
+                                    style="width: 100%; padding: 8px 12px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px;">
+                            </div>
+
+                            <div class="filter-row">
+                                <label
+                                    style="display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px;">Exam
+                                    Type:</label>
+                                <select id="filterExamType"
+                                    style="width: 100%; padding: 8px 12px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px;">
+                                    <option value="">All Types</option>
+                                    <option value="mcq">MCQ</option>
+                                    <option value="descriptive">Descriptive</option>
+                                    <option value="voice">Voice Interview</option>
+                                    <option value="webcam">Webcam Interview</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="filter-row" style="margin-bottom: 20px;">
+                            <label
+                                style="display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px;">Candidate
+                                Email:</label>
+                            <input type="text" id="filterCandidateEmail" placeholder="Search by email..."
+                                style="width: 100%; padding: 8px 12px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px;">
+                        </div>
+
+                        <div class="filter-actions" style="display: flex; gap: 12px; align-items: center;">
+                            <button class="btn btn-primary" onclick="applyAdvancedFilters()">Apply Filters</button>
+                            <button class="btn btn-secondary" onclick="clearAllAdvancedFilters()">Clear All</button>
+                            <div id="filterResultCount" style="margin-left: auto; color: #6c757d; font-size: 14px;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Download All Results Button -->
+                    <a href="/admin/download_results" class="btn btn-success mb-3">
+                        ⬇ Download All Exam Results (CSV)
+                    </a>
+
+                    {% if results %}
+                    <div class="candidates-list" id="candidatesList">
+                        {% for r in results %}
+                        <div class="candidate-card fade-in" data-test-id="{{ r.test_id }}"
+                            data-exam-title="{{ r.title }}" data-exam-type="{{ r.exam_type or '' }}"
+                            data-candidate-email="{{ r.candidate_email or '' }}">
+                            <div class="candidate-header">
+                                <div class="candidate-info">
+                                    <h3>{{ r.candidate }}</h3>
+                                    <p class="candidate-email">{{ r.candidate_email }}</p>
+                                </div>
+                                <div class="candidate-score">
+                                    {% if r.score is not none %}
+                                    <div class="score-value">{{ (r.score / r.total * 100)|round(1) if r.total else 0 }}%
+                                    </div>
+                                    <div class="score-label">Score</div>
+                                    {% else %}
+                                    <div class="score-value">-</div>
+                                    <div class="score-label">Not Evaluated</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="exam-meta">
+                                <div>Exam: {{ r.title }}</div>
+                                <div>Status: {% if r.evaluated %}<span class="badge bg-success">Evaluated</span>{% else
+                                    %}<span class="badge bg-warning text-dark">Pending</span>{% endif %}</div>
+                            </div>
+                            <div class="exam-actions">
+                                {% if r.score is none %}
+                                <a href="/evaluate/{{ r.id }}" class="btn btn-primary btn-sm">
+                                    Evaluate
+                                </a>
+                                {% else %}
+                                <span class="text-secondary">{{ r.score }} / {{ r.total }}</span>
+                                {% endif %}
+                                <a href="/admin/download/{{ r.id }}?format=csv" class="btn btn-secondary btn-sm">
+                                    CSV
+                                </a>
+                                <a href="/admin/download/{{ r.id }}?format=xlsx" class="btn btn-secondary btn-sm">
+                                    Excel
+                                </a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="empty-state">
+                        <div class="empty-state-icon">👥</div>
+                        <h3>No submissions yet</h3>
+                        <p>Candidates haven't submitted their exams yet</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Tab switching
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.addEventListener('click', () => {
+            const tabName = button.dataset.tab;
+
+            // Update buttons
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+
+            // Update content
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(tabName + '-tab').classList.add('active');
+        });
+    });
+
+    // File upload handling
+    function handleFileSelect(event) {
+        const file = event.target.files[0];
+        const uploadArea = document.getElementById('fileUploadArea');
+        const fileName = document.getElementById('fileName');
+
+        if (file) {
+            fileName.textContent = file.name;
+            uploadArea.classList.add('has-file');
+        }
+    }
+
+    // Copy exam link
+    function copyLink(examId) {
+        const input = document.getElementById('link-' + examId);
+        input.select();
+        document.execCommand('copy');
+        alert('Link copied to clipboard!');
+    }
+
+    // ==================== EXAM RESULTS FILTERING ====================
+
+    // Utility: Get query parameter from URL
+    function getQueryParam(name) {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get(name);
+    }
+
+    // Utility: Update URL without page reload
+    function updateURL(params) {
+        const url = new URL(window.location);
+        Object.keys(params).forEach(key => {
+            if (params[key]) {
+                url.searchParams.set(key, params[key]);
+            } else {
+                url.searchParams.delete(key);
+            }
+        });
+        window.history.pushState({}, '', url);
+    }
+
+    // Navigate to Results tab with exam filter
+    function viewExamResults(examId, examTitle) {
+        // Update URL with exam_id parameter
+        updateURL({ exam_id: examId });
+
+        // Switch to Results tab
+        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+        document.querySelector('[data-tab="results"]').classList.add('active');
+
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+        document.getElementById('results-tab').classList.add('active');
+
+        // Apply filter
+        filterResultsByExam();
+    }
+
+    // Filter results by exam ID
+    function filterResultsByExam() {
+        const examId = getQueryParam('exam_id');
+        const candidateCards = document.querySelectorAll('.candidate-card');
+        const filterBanner = document.getElementById('filterBanner');
+        const filterExamTitle = document.getElementById('filterExamTitle');
+
+        if (!examId) {
+            // No filter - show all results
+            candidateCards.forEach(card => {
+                card.style.display = '';
+            });
+            if (filterBanner) {
+                filterBanner.style.display = 'none';
+            }
+            return;
+        }
+
+        // Filter results
+        let visibleCount = 0;
+        let examTitle = '';
+
+        candidateCards.forEach(card => {
+            const cardTestId = card.dataset.testId;
+            if (cardTestId === examId) {
+                card.style.display = '';
+                visibleCount++;
+                if (!examTitle && card.dataset.examTitle) {
+                    examTitle = card.dataset.examTitle;
+                }
+            } else {
+                card.style.display = 'none';
+            }
+        });
+
+        // Show filter banner
+        if (filterBanner && filterExamTitle) {
+            filterBanner.style.display = 'flex';
+            filterExamTitle.textContent = examTitle || `Exam ID: ${examId}`;
+        }
+
+        // Show message if no results found
+        const candidatesList = document.getElementById('candidatesList');
+        if (candidatesList && visibleCount === 0) {
+            const emptyMsg = document.getElementById('emptyFilterMessage');
+            if (!emptyMsg) {
+                const msg = document.createElement('div');
+                msg.id = 'emptyFilterMessage';
+                msg.className = 'empty-state';
+                msg.innerHTML = `
+                    <div class="empty-state-icon">📭</div>
+                    <h3>No submissions for this exam</h3>
+                    <p>No candidates have submitted this exam yet</p>
+                `;
+                candidatesList.appendChild(msg);
+            }
+        } else {
+            const emptyMsg = document.getElementById('emptyFilterMessage');
+            if (emptyMsg) {
+                emptyMsg.remove();
+            }
+        }
+    }
+
+    // Clear exam filter
+    function clearExamFilter() {
+        // Remove exam_id from URL
+        updateURL({ exam_id: null });
+
+        // Show all results
+        filterResultsByExam();
+    }
+
+    // Apply filter on page load if exam_id is in URL
+    document.addEventListener('DOMContentLoaded', function () {
+        const examId = getQueryParam('exam_id');
+        if (examId) {
+            // Switch to Results tab
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            const resultsTab = document.querySelector('[data-tab="results"]');
+            if (resultsTab) {
+                resultsTab.classList.add('active');
+            }
+
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            const resultsContent = document.getElementById('results-tab');
+            if (resultsContent) {
+                resultsContent.classList.add('active');
+            }
+
+            // Apply filter
+            filterResultsByExam();
+        }
+    });
+
+    // ==================== ADVANCED MULTI-CRITERIA FILTERING ====================
+
+    // Toggle filter panel visibility
+    function toggleFilterPanel() {
+        const panel = document.getElementById('advancedFilterPanel');
+        const icon = document.getElementById('filterToggleIcon');
+
+        if (panel.style.display === 'none') {
+            panel.style.display = 'block';
+            icon.textContent = '▲';
+        } else {
+            panel.style.display = 'none';
+            icon.textContent = '▼';
+        }
+    }
+
+    // Get active filter values
+    function getActiveAdvancedFilters() {
+        return {
+            examName: document.getElementById('filterExamName')?.value.trim() || '',
+            examType: document.getElementById('filterExamType')?.value || '',
+            candidateEmail: document.getElementById('filterCandidateEmail')?.value.trim() || ''
+        };
+    }
+
+    // Check if a card matches all active filters (AND logic)
+    function matchesAdvancedFilters(card, filters) {
+        // Exam Name filter (case-insensitive partial match)
+        if (filters.examName) {
+            const examTitle = (card.dataset.examTitle || '').toLowerCase();
+            if (!examTitle.includes(filters.examName.toLowerCase())) {
+                return false;
+            }
+        }
+
+        // Exam Type filter (exact match)
+        if (filters.examType) {
+            const examType = card.dataset.examType || '';
+            if (examType !== filters.examType) {
+                return false;
+            }
+        }
+
+        // Candidate Email filter (case-insensitive partial match)
+        if (filters.candidateEmail) {
+            const email = (card.dataset.candidateEmail || '').toLowerCase();
+            if (!email.includes(filters.candidateEmail.toLowerCase())) {
+                return false;
+            }
+        }
+
+        return true; // All filters passed
+    }
+
+    // Apply advanced filters
+    function applyAdvancedFilters() {
+        const filters = getActiveAdvancedFilters();
+        const candidateCards = document.querySelectorAll('.candidate-card');
+        const candidatesList = document.getElementById('candidatesList');
+
+        let visibleCount = 0;
+        let totalCount = candidateCards.length;
+
+        // Apply filters to each card
+        candidateCards.forEach(card => {
+            if (matchesAdvancedFilters(card, filters)) {
+                card.style.display = '';
+                visibleCount++;
+            } else {
+                card.style.display = 'none';
+            }
+        });
+
+        // Update result count
+        updateAdvancedFilterResultCount(visibleCount, totalCount);
+
+        // Show empty state if no results
+        if (candidatesList && visibleCount === 0) {
+            let emptyMsg = document.getElementById('emptyAdvancedFilterMessage');
+            if (!emptyMsg) {
+                emptyMsg = document.createElement('div');
+                emptyMsg.id = 'emptyAdvancedFilterMessage';
+                emptyMsg.className = 'empty-state';
+                emptyMsg.innerHTML = `
+                    <div class="empty-state-icon">📭</div>
+                    <h3>No matching results</h3>
+                    <p>Try adjusting your filter criteria</p>
+                `;
+                candidatesList.appendChild(emptyMsg);
+            }
+        } else {
+            const emptyMsg = document.getElementById('emptyAdvancedFilterMessage');
+            if (emptyMsg) {
+                emptyMsg.remove();
+            }
+        }
+    }
+
+    // Update result count display
+    function updateAdvancedFilterResultCount(visible, total) {
+        const countElement = document.getElementById('filterResultCount');
+        if (countElement) {
+            if (visible === total) {
+                countElement.textContent = `Showing all ${total} results`;
+            } else {
+                countElement.textContent = `Showing ${visible} of ${total} results`;
+            }
+        }
+    }
+
+    // Clear all advanced filters
+    function clearAllAdvancedFilters() {
+        // Clear input fields
+        const examNameInput = document.getElementById('filterExamName');
+        const examTypeSelect = document.getElementById('filterExamType');
+        const candidateEmailInput = document.getElementById('filterCandidateEmail');
+
+        if (examNameInput) examNameInput.value = '';
+        if (examTypeSelect) examTypeSelect.value = '';
+        if (candidateEmailInput) candidateEmailInput.value = '';
+
+        // Show all cards
+        const candidateCards = document.querySelectorAll('.candidate-card');
+        candidateCards.forEach(card => {
+            card.style.display = '';
+        });
+
+        // Clear result count
+        const countElement = document.getElementById('filterResultCount');
+        if (countElement) {
+            countElement.textContent = '';
+        }
+
+        // Remove empty state message
+        const emptyMsg = document.getElementById('emptyAdvancedFilterMessage');
+        if (emptyMsg) {
+            emptyMsg.remove();
+        }
+    }
+
+</script>
+{% endblock %}

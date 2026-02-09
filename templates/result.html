@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Exam Submitted{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/candidate.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="confirmation-container">
+    <div class="confirmation-card card fade-in">
+        <div class="confirmation-icon">✅</div>
+        <h1>Exam Submitted Successfully!</h1>
+        <p class="mb-4" style="color: var(--text-secondary); font-size: 1.125rem; font-weight: 500;">
+            Thank you for completing the exam, {{ candidate }}
+        </p>
+
+        <div class="card"
+            style="text-align: left; max-width: 400px; margin: 0 auto; background: var(--bg-tertiary); border-color: var(--border-color);">
+            <h3 style="margin-bottom: var(--spacing-md);">Submission Details</h3>
+            <div style="font-size: 0.9375rem;">
+                <p style="margin-bottom: var(--spacing-sm);">
+                    <strong style="color: var(--text-primary);">Candidate:</strong>
+                    <span style="color: var(--text-secondary);">{{ candidate }}</span>
+                </p>
+                {% if score is not none and total is not none %}
+                <p style="margin-bottom: var(--spacing-sm);">
+                    <strong style="color: var(--text-primary);">Score:</strong>
+                    <span style="color: var(--text-secondary);">{{ score }} / {{ total }}</span>
+                </p>
+                {% endif %}
+                <p style="margin-bottom: 0;">
+                    <strong style="color: var(--text-primary);">Status:</strong>
+                    <span style="color: var(--success); font-weight: 600;">Submitted</span>
+                </p>
+            </div>
+        </div>
+
+        <p class="mt-4" style="font-size: 0.9375rem; color: var(--text-secondary); line-height: 1.6;">
+            Your responses have been recorded and will be evaluated by the administrator.
+            <br>
+            You will be notified of your results via email.
+        </p>
+    </div>
+</div>
+{% endblock %}

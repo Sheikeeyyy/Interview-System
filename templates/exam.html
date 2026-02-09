@@ -1,0 +1,424 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/candidate.css') }}">
+{% endblock %}
+
+{% block content %}
+
+{# ================= STEP 1: ENTER NAME + EMAIL ================= #}
+{% if step == "email" %}
+<div class="candidate-container">
+  <div class="candidate-card card fade-in">
+    <div class="candidate-header">
+      <h1 style="color: var(--text-primary); font-weight: 700;">{{ title }}</h1>
+      <p
+        style="display: inline-block; padding: 0.25rem 0.75rem; background: rgba(99, 102, 241, 0.15); border: 1px solid var(--primary); border-radius: 6px; color: var(--primary-light); font-size: 0.875rem; font-weight: 600; margin-bottom: var(--spacing-md);">
+        Exam ID: {{ request.view_args.get('test_id') }}
+      </p>
+      <p>Enter your details to begin the exam</p>
+    </div>
+
+    <div id="errorMessage" class="alert alert-error" style="display: none;"></div>
+
+    <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="step" value="send_otp">
+
+      <div class="form-group">
+        <label for="candidate" class="form-label">Full Name</label>
+        <input type="text" id="candidate" name="candidate" required autofocus placeholder="Enter your full name">
+      </div>
+
+      <div class="form-group">
+        <label for="email" class="form-label">Email Address</label>
+        <input type="email" id="email" name="email" required placeholder="Enter your email address">
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width: 100%;">
+        Get OTP
+      </button>
+    </form>
+
+    <p class="text-center mt-4"
+      style="font-size: 0.9375rem; margin-bottom: 0; color: var(--text-secondary); font-weight: 500;">
+      You will receive a One-Time Password via email to verify your identity
+    </p>
+  </div>
+</div>
+{% endif %}
+
+{# ================= STEP 2: VERIFY OTP ================= #}
+{% if step == "verify_otp" %}
+<div class="candidate-container">
+  <div class="candidate-card card fade-in">
+    <div class="candidate-header">
+      <h1>Verify OTP</h1>
+      <p style="color: var(--text-secondary); font-weight: 500;">Enter the 6-digit code sent to your email</p>
+    </div>
+
+    <div id="errorMessage" class="alert alert-error" style="display: none;"></div>
+
+    <form method="POST" id="otpForm">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="step" value="verify_otp">
+      <input type="hidden" name="otp" id="otpValue">
+
+      <div class="otp-input-group">
+        <input type="text" class="otp-digit" maxlength="1" id="otp1" autofocus>
+        <input type="text" class="otp-digit" maxlength="1" id="otp2">
+        <input type="text" class="otp-digit" maxlength="1" id="otp3">
+        <input type="text" class="otp-digit" maxlength="1" id="otp4">
+        <input type="text" class="otp-digit" maxlength="1" id="otp5">
+        <input type="text" class="otp-digit" maxlength="1" id="otp6">
+      </div>
+
+      <button type="submit" class="btn btn-primary" id="verifyBtn" style="width: 100%;">
+        Verify & Start Exam
+      </button>
+    </form>
+
+    <div class="otp-timer">
+      <p id="timerText" style="color: var(--text-secondary); font-weight: 500;">
+        OTP expires in <span id="timer" style="color: var(--warning); font-weight: 700;">5:00</span>
+      </p>
+    </div>
+
+    <p class="text-center mt-3">
+      <a href="{{ url_for('exam', test_id=request.view_args.get('test_id')) }}"
+        style="font-size: 0.9375rem; color: var(--primary-light); font-weight: 500; text-decoration: underline;">
+        Didn't receive OTP? Go back and try again
+      </a>
+    </p>
+  </div>
+</div>
+
+<script>
+  // OTP input handling
+  const otpInputs = document.querySelectorAll('.otp-digit');
+
+  otpInputs.forEach((input, index) => {
+    input.addEventListener('input', (e) => {
+      if (e.target.value.length === 1 && index < otpInputs.length - 1) {
+        otpInputs[index + 1].focus();
+      }
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' && e.target.value === '' && index > 0) {
+        otpInputs[index - 1].focus();
+      }
+    });
+
+    // Only allow numbers
+    input.addEventListener('keypress', (e) => {
+      if (!/[0-9]/.test(e.key)) {
+        e.preventDefault();
+      }
+    });
+  });
+
+  // Timer countdown
+  let timeLeft = 300; // 5 minutes in seconds
+  const timerElement = document.getElementById('timer');
+
+  const countdown = setInterval(() => {
+    timeLeft--;
+    const minutes = Math.floor(timeLeft / 60);
+    const seconds = timeLeft % 60;
+    timerElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+    if (timeLeft <= 0) {
+      clearInterval(countdown);
+      document.getElementById('timerText').innerHTML = '<span style="color: var(--error);">OTP expired. Please request a new one.</span>';
+      document.getElementById('verifyBtn').disabled = true;
+    }
+  }, 1000);
+
+  // Form submission
+  document.getElementById('otpForm').addEventListener('submit', (e) => {
+    const otp = Array.from(otpInputs).map(input => input.value).join('');
+    document.getElementById('otpValue').value = otp;
+
+    if (otp.length !== 6) {
+      e.preventDefault();
+      const errorMessage = document.getElementById('errorMessage');
+      errorMessage.textContent = 'Please enter all 6 digits';
+      errorMessage.style.display = 'block';
+    }
+  });
+</script>
+{% endif %}
+
+{# ================= STEP 3: EXAM ================= #}
+{% if step == "exam" %}
+
+{# Timer and exam header for non-voice exams #}
+{% if exam_type != "voice" %}
+<div class="exam-container">
+  <header class="exam-header">
+    <div class="exam-title-section">
+      <h2>{{ title }}</h2>
+    </div>
+    <div class="exam-info">
+      <div class="timer-display" id="timerDisplay">
+        <span>⏱️</span>
+        <span id="timer">{{ duration }}:00</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="exam-content">
+    <form id="examForm" method="POST" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      {% for i, q in questions %}
+      <div class="question-card fade-in">
+        <div class="question-number">Question {{ loop.index }} of {{ total }}</div>
+        <div class="question-text">{{ q.question }}</div>
+
+        {% if exam_type == "mcq" %}
+        <div class="mcq-options">
+          {% for opt in q.options %}
+          <div class="mcq-option" onclick="selectOption(this, '{{ i }}', '{{ opt[0] }}')">
+            <input class="form-check-input" type="radio" name="{{ i }}" value="{{ opt[0] }}" required>
+            <label>{{ opt }}</label>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <textarea class="descriptive-answer" name="desc_{{ i }}" rows="6" required
+          placeholder="Type your answer here..."></textarea>
+        {% endif %}
+      </div>
+      {% endfor %}
+
+      <div class="exam-navigation">
+        <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
+          Submit Exam
+        </button>
+      </div>
+    </form>
+  </main>
+</div>
+
+<script>
+  // Timer
+  let time = {{ duration }} * 60;
+  const timer = document.getElementById("timer");
+  const timerDisplay = document.getElementById("timerDisplay");
+
+  const interval = setInterval(() => {
+    if (time <= 0) {
+      clearInterval(interval);
+      document.getElementById("examForm").submit();
+      return;
+    }
+
+    let m = String(Math.floor(time / 60)).padStart(2, "0");
+    let s = String(time % 60).padStart(2, "0");
+    timer.textContent = m + ":" + s;
+
+    // Warning states
+    if (time <= 60) {
+      timerDisplay.classList.add('danger');
+    } else if (time <= 300) {
+      timerDisplay.classList.add('warning');
+    }
+
+    time--;
+  }, 1000);
+
+  // MCQ option selection
+  function selectOption(element, questionId, value) {
+    // Remove selected class from all options in this question
+    const allOptions = element.parentElement.querySelectorAll('.mcq-option');
+    allOptions.forEach(opt => opt.classList.remove('selected'));
+
+    // Add selected class to clicked option
+    element.classList.add('selected');
+
+    // Check the radio button
+    element.querySelector('input[type="radio"]').checked = true;
+  }
+
+  // Disable back button
+  history.pushState(null, null, location.href);
+  window.onpopstate = function () {
+    history.go(1);
+  };
+</script>
+
+{% else %}
+{# ================= VOICE MODE ================= #}
+<div class="exam-container">
+  <header class="exam-header">
+    <div class="exam-title-section">
+      <h2>{{ title }}</h2>
+    </div>
+    <div class="exam-info">
+      <div class="timer-display">
+        <span>⏱️</span>
+        <span id="timer">{{ duration }}:00</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="exam-content">
+    <form id="examForm" method="POST" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="transcripts_json" id="transcripts_json">
+      <input type="hidden" name="audio_files_json" id="audio_files_json">
+
+      <div class="question-card text-center">
+        <h4 id="questionBox" class="mb-4"></h4>
+        <p id="status" class="text-muted">Initializing microphone...</p>
+
+        <div class="recording-controls">
+          <button type="button" id="stopBtn" class="record-button">
+            ⏹
+          </button>
+        </div>
+        <div class="recording-status">Stop & Next</div>
+
+        <div id="audioInputs"></div>
+      </div>
+    </form>
+  </main>
+</div>
+
+<script>
+  let time = {{ duration }} * 60;
+  const timer = document.getElementById("timer");
+
+  const interval = setInterval(() => {
+    if (time <= 0) {
+      clearInterval(interval);
+      return;
+    }
+    let m = String(Math.floor(time / 60)).padStart(2, "0");
+    let s = String(time % 60).padStart(2, "0");
+    timer.textContent = m + ":" + s;
+    time--;
+  }, 1000);
+
+  // Voice interview logic
+  let questions = {{ questions | list | tojson }};
+  let current = 0;
+  let recorder = null;
+  let stream = null;
+  let chunks = [];
+
+  let audioFiles = {};
+  let transcripts = {};
+
+  const questionBox = document.getElementById("questionBox");
+  const stopBtn = document.getElementById("stopBtn");
+  const status = document.getElementById("status");
+  const form = document.getElementById("examForm");
+
+  async function initMic() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      nextQuestion();
+    } catch (err) {
+      alert("Microphone permission is required.");
+    }
+  }
+
+  function nextQuestion() {
+    if (current >= questions.length) {
+      status.innerText = "Interview completed. Submitting...";
+
+      document.getElementById("audio_files_json").value =
+        JSON.stringify(audioFiles);
+
+      document.getElementById("transcripts_json").value =
+        JSON.stringify(transcripts);
+
+      status.innerText = "Processing answers, please wait (do not close tab)...";
+      stopBtn.disabled = true;
+
+      form.submit();
+      return;
+    }
+
+    questionBox.innerText = questions[current][1].question;
+    status.innerText = "Recording...";
+    stopBtn.disabled = false;
+    chunks = [];
+
+    recorder = new MediaRecorder(stream);
+    recorder.ondataavailable = e => chunks.push(e.data);
+
+    recorder.onstop = async () => {
+      const blob = new Blob(chunks, { type: "audio/webm" });
+
+      // Short audio check
+      if (blob.size < 20000) {
+        alert("Answer too short, please speak longer.");
+        stopBtn.disabled = false;
+        status.innerText = "Recording...";
+        chunks = [];
+        recorder = new MediaRecorder(stream);
+        recorder.ondataavailable = e => chunks.push(e.data);
+        recorder.start();
+        return;
+      }
+
+      stopBtn.disabled = true;
+      status.innerText = "Uploading audio...";
+
+      const formData = new FormData();
+      formData.append("audio", blob, `q${current}.wav`);
+      formData.append("question_index", current);
+
+      try {
+        const res = await fetch(window.location.pathname.replace("/exam/", "/upload_audio/"), {
+          method: "POST",
+          body: formData,
+          credentials: "same-origin"
+        });
+
+        if (!res.ok) {
+          alert("Upload failed with status " + res.status);
+          stopBtn.disabled = false;
+          return;
+        }
+
+        const data = await res.json();
+        audioFiles[current] = data.audio_file;
+        transcripts[current] = data.transcript;
+
+        current++;
+        nextQuestion();
+
+      } catch (err) {
+        alert("Network error while uploading audio");
+        stopBtn.disabled = false;
+      }
+    };
+
+    recorder.start();
+  }
+
+  stopBtn.onclick = () => {
+    if (!recorder || recorder.state !== "recording") return;
+    stopBtn.disabled = true;
+    recorder.stop();
+  };
+
+  initMic();
+
+  // Disable back button
+  history.pushState(null, null, location.href);
+  window.onpopstate = function () {
+    history.go(1);
+  };
+</script>
+{% endif %}
+
+{% endif %}
+
+{% endblock %}
