@@ -154,6 +154,81 @@
 {# ================= STEP 3: EXAM ================= #}
 {% if step == "exam" %}
 
+<!-- ✅ SECURITY OVERLAYS -->
+<style>
+  #startOverlay,
+  #fullscreenWarning {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 20px;
+  }
+
+  #startOverlay {
+    background: var(--bg-primary, #fff);
+    color: var(--text-primary, #333);
+  }
+
+  #fullscreenWarning {
+    background: rgba(0, 0, 0, 0.95);
+    color: #ff4d4d;
+    display: none;
+    /* Hidden by default */
+  }
+
+  .security-notice {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: var(--text-secondary, #666);
+  }
+</style>
+
+<div id="startOverlay">
+  <div
+    style="max-width: 500px; padding: 40px; border-radius: 16px; background: var(--bg-card, #fff); box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+    <h1 style="margin-bottom: 20px;">Ready to Begin?</h1>
+    <p style="margin-bottom: 30px; line-height: 1.6;">
+      This exam relies on a strict full-screen environment.
+      <br>Please ensure you are ready to stay in full-screen mode for the duration of the test.
+    </p>
+    <button id="startBtn" class="btn btn-primary btn-lg" style="width: 100%;">
+      Start Exam & Enter Full Screen
+    </button>
+    <p class="security-notice">
+      <br>
+      ⚠️ Navigation, refresh, and tab switching are monitored.
+    </p>
+  </div>
+</div>
+
+<div id="fullscreenWarning">
+  <div style="text-align: center;">
+    <h1 style="font-size: 3rem; margin-bottom: 20px;">⚠️</h1>
+    <h2 style="margin-bottom: 15px;">Full Screen Required</h2>
+    <p style="margin-bottom: 30px; font-size: 1.1rem; color: #ffcccc;">
+      You have attempted to exit full-screen mode.
+      <br>Please return immediately to continue your exam.
+    </p>
+    <button id="returnBtn" class="btn btn-danger btn-lg">
+      Return to Full Screen
+    </button>
+  </div>
+</div>
+
+<!-- BLOCK CONTENT UNTIL STARTED -->
+<script>
+  document.body.style.overflow = 'hidden'; // Prevent scrolling before start
+</script>
+
+
 {# Timer and exam header for non-voice exams #}
 {% if exam_type != "voice" %}
 <div class="exam-container">
@@ -418,6 +493,116 @@
   };
 </script>
 {% endif %}
+
+
+<!-- ✅ GLOBAL SECURITY SCRIPT -->
+<script>
+  (function () {
+    const startOverlay = document.getElementById('startOverlay');
+    const fullscreenWarning = document.getElementById('fullscreenWarning');
+    const startBtn = document.getElementById('startBtn');
+    const returnBtn = document.getElementById('returnBtn');
+    let examStarted = false;
+
+    // 1. Enter Fullscreen
+    function enterFullscreen() {
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen().catch(err => {
+          console.error("Fullscreen blocked:", err);
+          alert("Please allow fullscreen mode to proceed.");
+        });
+      } else if (elem.webkitRequestFullscreen) { /* Safari */
+        elem.webkitRequestFullscreen();
+      } else if (elem.msRequestFullscreen) { /* IE11 */
+        elem.msRequestFullscreen();
+      }
+    }
+
+    // 2. Start Exam Flow
+    startBtn.addEventListener('click', () => {
+      enterFullscreen();
+      startOverlay.style.display = 'none';
+      document.body.style.overflow = 'auto';
+      examStarted = true;
+    });
+
+    // 3. Return to Fullscreen Flow
+    returnBtn.addEventListener('click', () => {
+      enterFullscreen();
+    });
+
+    // 4. Monitor Fullscreen Changes
+    document.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement && examStarted) {
+        fullscreenWarning.style.display = 'flex';
+      } else {
+        fullscreenWarning.style.display = 'none';
+      }
+    });
+
+    // 5. Monitor Visibility / Tab Switching
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && examStarted) {
+        alert("⚠️ WARNING: You switched tabs! This event has been recorded.");
+        // Optional: You could log this to the server here if backend modification was allowed
+      }
+    });
+
+    window.addEventListener('blur', () => {
+      if (examStarted && !document.hidden) {
+        // Often triggered by alt-tab or clicking outside
+        // Using a console warning or toast to avoid repetitive alerts
+        console.warn("Window lost focus");
+      }
+    });
+
+    // 6. Prevent Navigation / Refresh
+    window.addEventListener('beforeunload', (e) => {
+      if (examStarted) {
+        e.preventDefault();
+        e.returnValue = ''; // Trigger browser confirmation dialog
+      }
+    });
+
+    // ✅ Handle Form Submission (Allow Exit)
+    // Covers both manual button clicks and programmatic submit() calls (e.g. from timer)
+    const examForm = document.getElementById('examForm');
+    if (examForm) {
+      examForm.addEventListener('submit', () => {
+        examStarted = false;
+      });
+
+      const originalSubmit = examForm.submit;
+      examForm.submit = function () {
+        examStarted = false;
+        originalSubmit.apply(this, arguments);
+      };
+    }
+
+    // 7. Disable Specific Keys & Right Click
+    document.addEventListener('contextmenu', e => e.preventDefault());
+
+    document.addEventListener('keydown', (e) => {
+      // Prevent F12, Ctrl+Shift+I, Alt+Tab (partial), etc.
+      if (
+        e.key === "F12" ||
+        (e.ctrlKey && e.shiftKey && e.key === "I") ||
+        (e.ctrlKey && e.key === "u") ||
+        (e.key === "F5") ||
+        (e.ctrlKey && e.key === "r")
+      ) {
+        e.preventDefault();
+      }
+    });
+
+    // Disable Cut/Copy/Paste
+    document.addEventListener('copy', e => e.preventDefault());
+    document.addEventListener('paste', e => e.preventDefault());
+    document.addEventListener('cut', e => e.preventDefault());
+
+  })();
+</script>
 
 {% endif %}
 

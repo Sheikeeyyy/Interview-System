@@ -6,7 +6,83 @@
 {% endblock %}
 
 {% block content %}
+
 <!-- ✅ FULLSCREEN PROCTOR LAYOUT -->
+
+<!-- ✅ SECURITY OVERLAYS (Copied from exam.html) -->
+<style>
+  #startOverlay,
+  #fullscreenWarning {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 20px;
+  }
+
+  #startOverlay {
+    background: var(--bg-primary, #fff);
+    color: var(--text-primary, #333);
+  }
+
+  #fullscreenWarning {
+    background: rgba(0, 0, 0, 0.95);
+    color: #ff4d4d;
+    display: none;
+    /* Hidden by default */
+  }
+
+  .security-notice {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: var(--text-secondary, #666);
+  }
+</style>
+
+<div id="startOverlay">
+  <div
+    style="max-width: 500px; padding: 40px; border-radius: 16px; background: var(--bg-card, #fff); box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+    <h1 style="margin-bottom: 20px;">Ready for Interview?</h1>
+    <p style="margin-bottom: 30px; line-height: 1.6;">
+      This interview relies on a strict full-screen environment.
+      <br>Please ensure you are ready to stay in full-screen mode for the duration.
+    </p>
+    <button id="startBtn" class="btn btn-primary btn-lg" style="width: 100%;">
+      Start Interview & Enter Full Screen
+    </button>
+    <p class="security-notice">
+      <br>
+      ⚠️ Navigation, refresh, and tab switching are monitored.
+    </p>
+  </div>
+</div>
+
+<div id="fullscreenWarning">
+  <div style="text-align: center;">
+    <h1 style="font-size: 3rem; margin-bottom: 20px;">⚠️</h1>
+    <h2 style="margin-bottom: 15px;">Full Screen Required</h2>
+    <p style="margin-bottom: 30px; font-size: 1.1rem; color: #ffcccc;">
+      You have attempted to exit full-screen mode.
+      <br>Please return immediately to continue your interview.
+    </p>
+    <button id="returnBtn" class="btn btn-danger btn-lg">
+      Return to Full Screen
+    </button>
+  </div>
+</div>
+
+<!-- BLOCK CONTENT UNTIL STARTED -->
+<script>
+  document.body.style.overflow = 'hidden'; // Prevent scrolling before start
+</script>
+
 
 <input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
 <input type="hidden" id="test_id" value="{{ test_id }}">
@@ -542,60 +618,125 @@ transform:translateX(-50%); z-index:5;">
 
     stopBtn.disabled = false;
   }
-  /* ---------------- TAB SWITCH DETECTION ---------------- */
 
-  document.addEventListener("visibilitychange", async () => {
-    if (document.hidden) {
+  /* ---------------- TAB SWITCH DETECTION & FULLSCREEN ENFORCEMENT ---------------- */
+  let examStarted = false; // Flag to track exam status
 
-      warningOverlay.style.display = "block";
-      warningOverlay.innerText = "⚠ Tab switch detected!";
+  /* GLOBAL SECURITY SCRIPT (Adapted from exam.html) */
+  (function () {
+    const startOverlay = document.getElementById('startOverlay');
+    const fullscreenWarning = document.getElementById('fullscreenWarning');
+    const startBtn = document.getElementById('startBtn');
+    const returnBtn = document.getElementById('returnBtn');
 
-      await sendWarning("TAB_SWITCH", 0);
-
-    }
-  });
-
-  /* window blur (alt+tab / minimize) */
-  window.addEventListener("blur", async () => {
-    await sendWarning("WINDOW_BLUR", 0);
-  });
-
-  /* fullscreen exit detection */
-  document.addEventListener("fullscreenchange", async () => {
-    if (!document.fullscreenElement) {
-
-      await sendWarning("EXIT_FULLSCREEN", 0);
-
-      if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen();
+    // 1. Enter Fullscreen
+    function enterFullscreen() {
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen().catch(err => {
+          console.error("Fullscreen blocked:", err);
+          alert("Please allow fullscreen mode to proceed.");
+        });
+      } else if (elem.webkitRequestFullscreen) { /* Safari */
+        elem.webkitRequestFullscreen();
+      } else if (elem.msRequestFullscreen) { /* IE11 */
+        elem.msRequestFullscreen();
       }
     }
-  });
-  /* ---------------- INPUT LOCK ---------------- */
 
-  document.addEventListener("contextmenu", e => e.preventDefault());
-  document.addEventListener("copy", e => e.preventDefault());
-  document.addEventListener("paste", e => e.preventDefault());
+    // 2. Start Exam Flow
+    startBtn.addEventListener('click', () => {
+      enterFullscreen();
+      startOverlay.style.display = 'none';
+      document.body.style.overflow = 'auto'; // Re-enable scrolling if needed
 
-  document.addEventListener("keydown", function (e) {
-    if (
-      e.key === "F12" ||
-      (e.ctrlKey && e.shiftKey && e.key === "I") ||
-      (e.ctrlKey && e.key === "u") ||
-      (e.altKey && e.key === "Tab")
-    ) {
-      e.preventDefault();
+      // Initialize the webcam logic ONLY after user starts
+      if (!examStarted) {
+        examStarted = true;
+        init().catch(console.error);
+      }
+    });
+
+    // 3. Return to Fullscreen Flow
+    returnBtn.addEventListener('click', () => {
+      enterFullscreen();
+      fullscreenWarning.style.display = 'none'; // Hide warning
+    });
+
+    // 4. Monitor Fullscreen Changes
+    document.addEventListener('fullscreenchange', async () => {
+      if (!document.fullscreenElement && examStarted) {
+        // Show Big Warning Overlay
+        fullscreenWarning.style.display = 'flex';
+
+        // Log to backend (keep existing feature)
+        await sendWarning("EXIT_FULLSCREEN", 0);
+      } else {
+        fullscreenWarning.style.display = 'none';
+      }
+    });
+
+    // 5. Monitor Visibility / Tab Switching
+    document.addEventListener('visibilitychange', async () => {
+      if (document.hidden && examStarted) {
+        // Show existing small overlay if desired, or rely on alert
+        warningOverlay.style.display = "block";
+        warningOverlay.innerText = "⚠ Tab switch detected!";
+
+        // Log to backend
+        await sendWarning("TAB_SWITCH", 0);
+
+        // Optional: Alert (like in exam.html)
+        // alert("⚠️ WARNING: You switched tabs! This event has been recorded.");
+      }
+    });
+
+    // Window Blur
+    window.addEventListener("blur", async () => {
+      if (examStarted && !document.hidden) {
+        await sendWarning("WINDOW_BLUR", 0);
+      }
+    });
+
+    // 6. Prevent Navigation / Refresh
+    window.addEventListener('beforeunload', (e) => {
+      if (examStarted) {
+        e.preventDefault();
+        e.returnValue = ''; // Trigger browser confirmation dialog
+      }
+    });
+
+    // 7. Input Locks (Keys & Context Menu)
+    document.addEventListener("contextmenu", e => e.preventDefault());
+    document.addEventListener("copy", e => e.preventDefault());
+    document.addEventListener("paste", e => e.preventDefault());
+    document.addEventListener("cut", e => e.preventDefault());
+
+    document.addEventListener("keydown", function (e) {
+      if (
+        e.key === "F12" ||
+        (e.ctrlKey && e.shiftKey && e.key === "I") ||
+        (e.ctrlKey && e.key === "u") ||
+        (e.altKey && e.key === "Tab") ||
+        (e.key === "F5") ||
+        (e.ctrlKey && e.key === "r")
+      ) {
+        e.preventDefault();
+      }
+    });
+
+    // Auto-exit examStarted on finish
+    const stopBtn = document.getElementById('stopBtn');
+    if (stopBtn) {
+      // Allow exit without warning
+      stopBtn.addEventListener('click', () => {
+        examStarted = false;
+      });
     }
-  });
 
-  window.onload = () => {
+  })();
 
-    if (document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen();
-    }
-
-    setTimeout(init, 600);
-  };
-
+  // Remove window.onload auto-start
+  // window.onload = ... REMOVED
 </script>
 {% endblock %}
